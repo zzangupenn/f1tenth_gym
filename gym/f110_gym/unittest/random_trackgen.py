@@ -180,36 +180,38 @@ def convert_track(track, track_int, track_ext, iter):
     fig, ax = plt.subplots()
     fig.set_size_inches(20, 20)
     # TODO
-    # ax.plot(*track_int.T, color='black', linewidth=3)
-    # ax.plot(*track_ext.T, color='black', linewidth=3)
-    # plt.tight_layout()
-    # ax.set_aspect('equal')
-    # ax.set_xlim(-180, 300)
-    # ax.set_ylim(-300, 300)
-    # plt.axis('off')
-    # plt.savefig('maps/map' + str(iter) + '.png', dpi=80)
+    ax.plot(*track_int.T, color='black', linewidth=3)
+    ax.plot(*track_ext.T, color='black', linewidth=3)
+    plt.tight_layout()
+    ax.set_aspect('equal')
+    ax.set_xlim(-300, 300)
+    ax.set_ylim(-300, 300)
+    plt.axis('off')
+    
 
-    map_width, map_height = fig.canvas.get_width_height()
-    print('map size: ', map_width, map_height)
+    # map_width, map_height = fig.canvas.get_width_height()
+    # print('map size: ', map_width, map_height)
 
     # transform the track center line into pixel coordinates
     xy_pixels = ax.transData.transform(track)
     origin_x_pix = xy_pixels[0, 0]
     origin_y_pix = xy_pixels[0, 1]
-
     xy_pixels = xy_pixels - np.array([[origin_x_pix, origin_y_pix]])
 
     map_origin_x = -origin_x_pix*0.05
     map_origin_y = -origin_y_pix*0.05
+    
+    # plt.show()
+    plt.savefig('maps/map' + str(iter) + '.png', dpi=80)
 
     # TODO
     # # convert image using cv2
-    # cv_img = cv2.imread('maps/map' + str(iter) + '.png', -1)
+    cv_img = cv2.imread('maps/map' + str(iter) + '.png', -1)
     # # convert to bw
-    # cv_img_bw = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+    cv_img_bw = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
     # # saving to img
-    # cv2.imwrite('maps/map' + str(iter) + '.png', cv_img_bw)
-    # cv2.imwrite('maps/map' + str(iter) + '.pgm', cv_img_bw)
+    cv2.imwrite('maps/map' + str(iter) + '.png', cv_img_bw)
+    cv2.imwrite('maps/map' + str(iter) + '.pgm', cv_img_bw)
 
     # create yaml file
     yaml = open('maps/map' + str(iter) + '.yaml', 'w')
@@ -229,10 +231,12 @@ def convert_track(track, track_int, track_ext, iter):
 
 
 if __name__ == '__main__':
-    for i in range(NUM_MAPS):
+    ind = 0
+    while ind < NUM_MAPS:
         try:
             track, track_int, track_ext = create_track()
         except:
             print('Random generator failed, retrying')
             continue
-        convert_track(track, track_int, track_ext, i)
+        convert_track(track, track_int, track_ext, ind)
+        ind += 1

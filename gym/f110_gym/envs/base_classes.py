@@ -34,6 +34,7 @@ from scipy import integrate
 from f110_gym.envs.dynamic_models import vehicle_dynamics_st, vehicle_dynamics_mb, init_mb, pid, accl_constraints, steering_constraint
 from f110_gym.envs.laser_models import ScanSimulator2D, check_ttc_jit, ray_cast
 from f110_gym.envs.collision_models import get_vertices, collision_multiple
+DO_SCAN = True
 
 
 class RaceCar(object):
@@ -620,8 +621,9 @@ class Simulator(object):
         # looping over agents
         for i, agent in enumerate(self.agents):
             # update each agent's pose
-            # NOTE: current_scan = agent.get_current_scan()
-            # NOTE: agent_scans.append(current_scan)
+            if DO_SCAN:
+                current_scan = agent.get_current_scan()
+                agent_scans.append(current_scan)
 
             # update sim's information of agent poses
             self.agent_poses[i, :] = np.append(agent.state[0:2], agent.state[4])
@@ -630,12 +632,13 @@ class Simulator(object):
         self.check_collision()
 
         for i, agent in enumerate(self.agents):
-            # update agent's information on other agents
-            # NOTE: opp_poses = np.concatenate((self.agent_poses[0:i, :], self.agent_poses[i + 1:, :]), axis=0)
-            # NOTE: agent.update_opp_poses(opp_poses)
+            if DO_SCAN:
+                # update agent's information on other agents
+                opp_poses = np.concatenate((self.agent_poses[0:i, :], self.agent_poses[i + 1:, :]), axis=0)
+                agent.update_opp_poses(opp_poses)
 
-            # update each agent's current scan based on other agents
-            # NOTE: agent.update_scan(agent_scans, i)
+                # update each agent's current scan based on other agents
+                agent.update_scan(agent_scans, i)
 
             # update agent collision with environment
             if agent.in_collision:
@@ -662,7 +665,6 @@ class Simulator(object):
         #     observations['linear_vels_x'].append(agent.state[3])
         #     observations['linear_vels_y'].append(0.)
         #     observations['ang_vels_z'].append(agent.state[5])
-
         observations = {'ego_idx': self.ego_idx,
                         'scans': [],
                         'poses_x': [],
@@ -687,7 +689,7 @@ class Simulator(object):
                         'control1': [],
                         'state': []}
         for i, agent in enumerate(self.agents):
-            # observations['scans'].append(agent_scans[i])
+            if DO_SCAN: observations['scans'].append(agent_scans[i])
             observations['poses_x'].append(agent.state[0])
             observations['poses_y'].append(agent.state[1])
             observations['poses_theta'].append(agent.state[4])
