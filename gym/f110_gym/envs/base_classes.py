@@ -291,6 +291,8 @@ class RaceCar(object):
             s_lf, s_rf, s_lr, s_rr, alpha_LF, alpha_RF, alpha_LR, alpha_RR, \
             F_z_LF, F_z_RF, F_z_LR, F_z_RR = vehicle_dynamics_mb(x, u, p, use_kinematic)
         return f
+    
+    
 
     def update_pose(self, raw_steer, drive):
         """
@@ -336,27 +338,42 @@ class RaceCar(object):
 
         # update physics, get RHS of diff'eq
         if self.model == 'dynamic_ST':
-            f = vehicle_dynamics_st(
-                self.state,
-                np.array([sv, accl]),
-                self.params['mu'],
-                self.params['C_Sf'],
-                self.params['C_Sr'],
-                self.params['lf'],
-                self.params['lr'],
-                self.params['h'],
-                self.params['m'],
-                self.params['I'],
-                self.params['s_min'],
-                self.params['s_max'],
-                self.params['sv_min'],
-                self.params['sv_max'],
-                self.params['v_switch'],
-                self.params['a_max'],
-                self.params['v_min'],
-                self.params['v_max'])
+            Ddt = 0.05
+            if self.time_step < Ddt:
+                Ddt = self.time_step
+            def step_fn(x0, u, Ddt, vehicle_dynamics_st, args):
+                # # Forward euler
+                # return x0 + vehicle_dynamics_st(x0, u, *args) * Ddt
+
+                # RK45
+                k1 = vehicle_dynamics_st(x0, u, *args)
+                k2 = vehicle_dynamics_st(x0 + k1 * 0.5 * Ddt, u, *args)
+                k3 = vehicle_dynamics_st(x0 + k2 * 0.5 * Ddt, u, *args)
+                k4 = vehicle_dynamics_st(x0 + k3 * Ddt, u, *args)
+                return x0 + (k1 + 2 * k2 + 2 * k3 + k4) / 6 * Ddt
+            
+            x = self.state.copy()
+            for ind in range(0, int(self.time_step / Ddt)):
+                x = step_fn(x, np.array([sv, accl]), Ddt, vehicle_dynamics_st, 
+                            args=(self.params['mu'],
+                            self.params['C_Sf'],
+                            self.params['C_Sr'],
+                            self.params['lf'],
+                            self.params['lr'],
+                            self.params['h'],
+                            self.params['m'],
+                            self.params['I'],
+                            self.params['s_min'],
+                            self.params['s_max'],
+                            self.params['sv_min'],
+                            self.params['sv_max'],
+                            self.params['v_switch'],
+                            self.params['a_max'],
+                            self.params['v_min'],
+                            self.params['v_max']))
             # update state
-            self.state = self.state + f * self.time_step
+            self.state = x
+            # self.state = self.state + f * self.time_step
         elif self.model == 'MB':
             params_array = np.array(list(self.params.values()))
 

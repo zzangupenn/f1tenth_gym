@@ -45,8 +45,8 @@ from pyglet import gl
 # constants
 
 # rendering
-# VIDEO_W = 600
-# VIDEO_H = 400
+# WINDOW_W = 857
+# WINDOW_H = 685
 WINDOW_W = 1500
 WINDOW_H = 1200
 
@@ -143,7 +143,7 @@ class F110Env(gym.Env):
                 #                'width': 0.31, 'length': 0.58}  # F1/10 car
                 self.params = {'mu': 1.0489, 'C_Sf': 20.898, 'C_Sr': 20.898, 'lf': 0.88392, 'lr': 1.50876, 'h': 0.59436,
                                'm': 1225.887, 'I': 1538.853371, 's_min': -0.910, 's_max': 0.910, 'sv_min': -0.4,
-                               'sv_max': 0.4, 'v_switch': 4.755, 'a_max': 3.5, 'v_min': -13.9, 'v_max': 45.8,
+                               'sv_max': 0.4, 'v_switch': 4.755, 'a_max': 3.5, 'v_min': -13.9, 'v_max': 99,
                                'width': 1.674, 'length': 4.298} # real car
             elif self.model == 'MB':
                 self.params = {
