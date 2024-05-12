@@ -34,7 +34,7 @@ from scipy import integrate
 from f110_gym.envs.dynamic_models import vehicle_dynamics_st, vehicle_dynamics_mb, init_mb, pid, accl_constraints, steering_constraint
 from f110_gym.envs.laser_models import ScanSimulator2D, check_ttc_jit, ray_cast
 from f110_gym.envs.collision_models import get_vertices, collision_multiple
-DO_SCAN = True
+DO_SCAN = True # no collision detection if False
 
 
 class RaceCar(object):
