@@ -157,7 +157,6 @@ class EnvRenderer(pyglet.window.Window):
 
         # mask and only leave the obstacle points
         map_mask = map_img != 255
-        print('map_mask', map_mask.shape, map_mask.sum())
         map_mask_flat = map_mask.flatten()
         map_points = PLOT_SCALE * map_coords[:, map_mask_flat].T
         for i in range(map_points.shape[0]):
