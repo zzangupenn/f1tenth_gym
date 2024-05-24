@@ -48,10 +48,10 @@ PLOT_SCALE = 10. if os.getenv('F110GYM_PLOT_SCALE') == None else float(os.getenv
 print('PLOT_SCALE', PLOT_SCALE)
 
 # vehicle shape constants
-CAR_LENGTH = 0.58 # F1/10 car
-CAR_WIDTH = 0.31 # F1/10 car
-# CAR_LENGTH = 4.298 # real car
-# CAR_WIDTH = 1.674 # real car
+# CAR_LENGTH = 0.58 # F1/10 car
+# CAR_WIDTH = 0.31 # F1/10 car
+CAR_LENGTH = 4.298 # real car
+CAR_WIDTH = 1.674 # real car
 BACKGROUND_COLOR = [25, 25, 25]
 WAYPOINT_COLOR = [255, 255, 255]
 
