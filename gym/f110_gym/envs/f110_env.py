@@ -131,12 +131,12 @@ class F110Env(gym.Env):
         except:
             self.model = 'dynamic_ST'
         # check valid options
-        assert self.model in ['dynamic_ST', 'MB']
+        assert self.model in ['dynamic_ST', 'MB', 'lmpc']
 
         try:
             self.params = kwargs['params']
         except:
-            if self.model == 'dynamic_ST':
+            if self.model == 'dynamic_ST' or self.model == 'lmpc':
                 # self.params = {'mu': 1.0489, 'C_Sf': 4.718, 'C_Sr': 5.4562, 'lf': 0.15875, 'lr': 0.17145, 'h': 0.074,
                 #                'm': 3.74, 'I': 0.04712, 's_min': -0.4189, 's_max': 0.4189, 'sv_min': -3.2,
                 #                'sv_max': 3.2, 'v_switch': 7.319, 'a_max': 9.51, 'v_min': -5.0, 'v_max': 20.0,
@@ -319,7 +319,7 @@ class F110Env(gym.Env):
 
         # initiate stuff
         self.sim = Simulator(self.model, self.steering_control_mode, self.drive_control_mode, self.params,
-                             self.num_agents, self.seed, time_step=self.timestep)
+                             self.num_agents, self.seed, time_step=self.timestep, waypoints=kwargs['waypoints'])
         self.sim.set_map(self.map_path, self.map_ext)
 
         # stateful observations for rendering

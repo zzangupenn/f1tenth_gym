@@ -87,7 +87,6 @@ def steering_constraint(steering_angle, steering_velocity, s_min, s_max, sv_min,
 
     return steering_velocity
 
-
 @njit(cache=True)
 def vehicle_dynamics_ks(x, u_init, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max, sv_min, sv_max, v_switch, a_max, v_min, v_max):
     """
@@ -120,6 +119,91 @@ def vehicle_dynamics_ks(x, u_init, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max
          u[1],
          x[3]/lwb*np.tan(x[2])])
     return f
+
+def vehicle_dynamics_st_pacjeka_frenet(x, u_init, curvature, params, mu=1.0):
+    """
+    Single Track Dynamic Vehicle Dynamics.
+
+        Args:
+            x (numpy.ndarray (6, )): vehicle state vector (x1, x2, x3, x4, x5, x6)
+                x1: curvilinear s coordinate
+                x2: lateral error ey
+                x3: yaw error
+                x4: velocity in x direction
+                x5: velocity in y direction
+                x6: yaw rate
+                
+                # x1: velocity in x direction
+                # x2: velocity in y direction
+                # x3: yaw rate
+                # x4: yaw error
+                # x5: curvilinear s coordinate
+                # x6: lateral error ey
+            u (numpy.ndarray (2, )): control input vector (u1, u2)
+                u1: steering angle of front wheels
+                u2: longitudinal acceleration
+
+        Returns:
+            f (numpy.ndarray): right hand side of differential equations
+    """
+    # gravity constant m/s^2
+    # g = 9.81
+    x = x[[3, 4, 5, 2, 0, 1]]
+    
+    
+    # steering constraints
+    lf = params['lf']  # distance from spring mass center of gravity to front axle [m]  LENA
+    lr = params['lr']  # distance from spring mass center of gravity to rear axle [m]  LENB
+    h = params['h']  # M_s center of gravity above ground [m]  HS
+    m = params['m']  # vehicle mass [kg]  MASS
+    I = params['I']  # moment of inertia for sprung mass in yaw [kg m^2]  IZZ
+    C_Sf = params['C_Sf']  # front tire cornering stiffness [N/rad]  CF
+    C_Sr = params['C_Sr']  # rear tire cornering stiffness [N/rad]  CR
+    s_min = params['s_min']  # minimum steering angle [rad]
+    s_max = params['s_max']  # maximum steering angle [rad]
+    # longitudinal constraints
+    v_min = params['v_min']  # minimum velocity [m/s]
+    v_max = params['v_max'] # minimum velocity [m/s]
+    sv_min = params['sv_min'] # minimum steering velocity [rad/s]
+    sv_max = params['sv_max'] # maximum steering velocity [rad/s]
+    v_switch = params['v_switch']  # switching velocity [m/s]
+    a_max = params['a_max'] # maximum absolute acceleration [m/s^2]
+
+    # constraints
+    u = u_init
+    # u = np.array([steering_constraint(x[2], u_init[0], s_min, s_max, sv_min, sv_max), accl_constraints(x[3], u_init[1], v_switch, a_max, v_min, v_max)])
+
+    Fzf = (m * 9.81) * (lr / (lf + lr))
+    Fzr = (m * 9.81) * (lf / (lf + lr)) 
+    ky1 = 21.92 # Lateral slip stiffness Kfy/Fz at Fznom
+    Df = mu * Fzf
+    Kf = Fzf * ky1
+    Bf = Kf / (C_Sf * Df)
+    Dr = mu * Fzr
+    Kr = Fzr * ky1
+    Br = Kr / (C_Sr * Dr)
+    
+    vx    = x[0]
+    vy    = x[1]
+    wz    = x[2]
+
+    # Compute tire split angle
+    alpha_f = u[0] - np.arctan2( vy + lf * wz, vx )
+    alpha_r = - np.arctan2( vy - lf * wz , vx)
+
+    # Compute lateral force at front and rear tire
+    Fyf = Df * np.sin( C_Sf * np.arctan(Bf * alpha_f ) )
+    Fyr = Dr * np.sin( C_Sr * np.arctan(Br * alpha_r ) )
+
+    # system dynamics
+    f = np.array([(u[1] - 1 / m * Fyf * np.sin(u[0]) + x[2]*x[1]),
+                   (1 / m * (Fyf * np.cos(u[0]) + Fyr) - x[2] * x[0]),
+                   (1 / I *(lf * Fyf * np.cos(u[0]) - lr * Fyr) ),
+                   ( wz - (x[0] * np.cos(x[3]) - x[1] * np.sin(x[3])) / (1 - curvature * x[5]) * curvature ),
+                   ( (x[0] * np.cos(x[3]) - x[1] * np.sin(x[3])) / (1 - curvature * x[5]) ),
+                   (x[0] * np.sin(x[3])  + x[1] * np.cos(x[3]))])
+    return f[[4, 5, 3, 0, 1, 2]]
+
 
 @njit(cache=True)
 def vehicle_dynamics_st(x, u_init, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max, sv_min, sv_max, v_switch, a_max, v_min, v_max):

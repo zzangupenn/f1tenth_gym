@@ -31,10 +31,12 @@ import numpy as np
 from numba import njit
 from scipy import integrate
 
-from f110_gym.envs.dynamic_models import vehicle_dynamics_st, vehicle_dynamics_mb, init_mb, pid, accl_constraints, steering_constraint
+from f110_gym.envs.dynamic_models import vehicle_dynamics_st, vehicle_dynamics_mb, init_mb, pid, \
+                                        accl_constraints, steering_constraint, vehicle_dynamics_st_pacjeka_frenet
 from f110_gym.envs.laser_models import ScanSimulator2D, check_ttc_jit, ray_cast
 from f110_gym.envs.collision_models import get_vertices, collision_multiple
-DO_SCAN = True # no collision detection if False
+import f110_gym.envs.frenet_utils as frenet_utils 
+DO_SCAN = False # no collision detection if False
 
 
 class RaceCar(object):
@@ -67,7 +69,7 @@ class RaceCar(object):
     side_distances = None
 
     def __init__(self, model, steering_control_mode, drive_control_mode, params, seed, is_ego=False, time_step=0.01,
-                 num_beams=1080, fov=4.7):
+                 num_beams=1080, fov=4.7, waypoints=None):
         """
         Init function
 
@@ -97,6 +99,7 @@ class RaceCar(object):
         self.longitudinal_slip = np.zeros(4)
         self.lateral_slip = np.zeros(4)
         self.vertical_tire_forces = np.zeros(4)
+        self.waypoints = waypoints
 
         if self.model == 'dynamic_ST':
             # state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]
@@ -104,7 +107,10 @@ class RaceCar(object):
         elif self.model == 'MB':
             params_array = np.array(list(self.params.values()))
             self.state = init_mb(np.zeros((7,)), params_array)
-
+        elif self.model == 'lmpc':
+            # state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]
+            self.state = np.zeros((7,))
+            
         # pose of opponents in the world
         self.opp_poses = None
 
@@ -205,8 +211,6 @@ class RaceCar(object):
         self.in_collision = False
         # clear state
         if self.model == 'dynamic_ST':
-            # print('pose', pose)
-            # self.state = pose
             self.state = np.zeros((7,))
             self.state[0:2] = pose[0:2]
             self.state[2] = steering_angle
@@ -216,7 +220,6 @@ class RaceCar(object):
             self.state[6] = beta
         elif self.model == 'MB':
             params_array = np.array(list(self.params.values()))
-            
             if len(pose) == 29:
                 self.state = pose
             else:
@@ -224,6 +227,15 @@ class RaceCar(object):
                                             steering_angle, velocity,
                                             pose[2], yaw_rate,
                                             beta]), params_array)
+        elif self.model == 'lmpc':
+            self.state = np.zeros((7,))
+            self.state[0:2] = pose[0:2]
+            self.state[2] = steering_angle
+            self.state[3] = velocity
+            self.state[4] = pose[2]
+            self.state[5] = yaw_rate
+            self.state[6] = beta
+            
         self.steer_buffer = np.empty((0,))
         # reset scan random generator
         self.scan_rng = np.random.default_rng(seed=self.seed)
@@ -319,7 +331,8 @@ class RaceCar(object):
         #     self.steer_buffer = np.append(raw_steer, self.steer_buffer)
         steer = raw_steer
 
-        if self.steering_control_mode != 'vel' or self.drive_control_mode != 'acc':
+        if (self.steering_control_mode != 'vel' or self.drive_control_mode != 'acc') \
+            and not self.model == 'lmpc':
             # steering angle velocity input to steering velocity acceleration input
             accl, sv = pid(drive, steer, self.state[3], self.state[2], self.params['sv_max'], self.params['a_max'],
                         self.params['v_max'], self.params['v_min'])
@@ -334,11 +347,37 @@ class RaceCar(object):
 
         if self.steering_control_mode == 'vel':
             sv = steer
-        integration_method = 'LSODA_old'  # 'LSODA'  'euler' 'LSODA_old' 'RK45'
-
+        
         # update physics, get RHS of diff'eq
-        if self.model == 'dynamic_ST':
-            Ddt = 0.05
+        if self.model == 'lmpc':
+            Ddt = 0.02
+            x = self.state.copy()
+            x2 = self.state.copy()
+            # print('self.state0', self.state)
+            steer = self.state[2] + sv * self.time_step/2
+            # print('np.array([steer, accl])', np.array([steer, accl]))
+            s_pose = np.zeros(6)
+            s_pose[[0, 1, 2]] = frenet_utils.cartesian_to_frenet(self.state[[0, 1, 4]], self.waypoints)
+            s_pose[3] = x2[3]
+            s_pose[4] = x2[5]
+            s_pose[5] = x2[6]
+            # print('s_pose0', s_pose)
+            for ind in range(0, int(self.time_step / Ddt)):
+                s_pose = s_pose + vehicle_dynamics_st_pacjeka_frenet(s_pose, np.array([steer, accl]), 0., self.params) * Ddt
+            # print('s_pose1', s_pose)
+            x_pose = frenet_utils.frenet_to_cartesian(s_pose[[0, 1, 2]], self.waypoints)
+            x[0] = x_pose[0]
+            x[1] = x_pose[1]
+            x[2] = steer
+            x[3] = s_pose[3]
+            x[4] = x_pose[2]
+            x[5] = s_pose[4]
+            x[6] = s_pose[5]
+            self.state = x
+            # print('self.state1', self.state)
+        
+        elif self.model == 'dynamic_ST':
+            Ddt = 0.02
             if self.time_step < Ddt:
                 Ddt = self.time_step
             def step_fn(x0, u, Ddt, vehicle_dynamics_st, args):
@@ -375,6 +414,7 @@ class RaceCar(object):
             self.state = x
             # self.state = self.state + f * self.time_step
         elif self.model == 'MB':
+            integration_method = 'LSODA_old'  # 'LSODA'  'euler' 'LSODA_old' 'RK45'
             params_array = np.array(list(self.params.values()))
 
             # steering constraints
@@ -457,9 +497,9 @@ class RaceCar(object):
             self.state[4] = self.state[4] + 2 * np.pi
 
         # update scan
-        current_scan = self.get_current_scan()
+        # current_scan = self.get_current_scan()
 
-        return current_scan
+        # return current_scan
 
     def get_current_scan(self):
         return RaceCar.scan_simulator.scan(np.append(self.state[0:2], self.state[4]), self.scan_rng)
@@ -515,7 +555,7 @@ class Simulator(object):
     """
 
     def __init__(self, model, steering_control_mode, drive_control_mode, params, num_agents, seed, time_step=0.01,
-                 ego_idx=0):
+                 ego_idx=0, waypoints=None):
         """
         Init function
 
@@ -547,11 +587,11 @@ class Simulator(object):
         for i in range(self.num_agents):
             if i == ego_idx:
                 ego_car = RaceCar(self.model, self.steering_control_mode, self.drive_control_mode, params, self.seed,
-                                  time_step=self.time_step, is_ego=True)
+                                  time_step=self.time_step, is_ego=True, waypoints=waypoints)
                 self.agents.append(ego_car)
             else:
                 agent = RaceCar(self.model, self.steering_control_mode, self.drive_control_mode, params, self.seed,
-                                time_step=self.time_step)
+                                time_step=self.time_step, waypoints=waypoints)
                 self.agents.append(agent)
                 
         # self.observations = self.get_observations(np.zeros((self.num_agents, 2)))
