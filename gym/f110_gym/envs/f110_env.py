@@ -286,6 +286,12 @@ class F110Env(gym.Env):
             self.ego_idx = kwargs['ego_idx']
         except:
             self.ego_idx = 0
+        
+        # default waypoints
+        try:
+            self.waypoints = kwargs['waypoints']
+        except:
+            self.waypoints = None
 
         # radius to consider done
         self.start_thresh = 0.5  # 10cm
@@ -319,7 +325,7 @@ class F110Env(gym.Env):
 
         # initiate stuff
         self.sim = Simulator(self.model, self.steering_control_mode, self.drive_control_mode, self.params,
-                             self.num_agents, self.seed, time_step=self.timestep, waypoints=kwargs['waypoints'])
+                             self.num_agents, self.seed, time_step=self.timestep, waypoints=self.waypoints)
         self.sim.set_map(self.map_path, self.map_ext)
 
         # stateful observations for rendering

@@ -170,8 +170,16 @@ def vehicle_dynamics_st_pacjeka_frenet(x, u_init, curvature, params, mu=1.0):
     a_max = params['a_max'] # maximum absolute acceleration [m/s^2]
 
     # constraints
-    u = u_init
-    # u = np.array([steering_constraint(x[2], u_init[0], s_min, s_max, sv_min, sv_max), accl_constraints(x[3], u_init[1], v_switch, a_max, v_min, v_max)])
+    u = u_init.copy()
+    if u_init[0] > s_max:
+        u[0] = s_max
+    if u_init[0] < s_min:
+        u[0] = s_min
+    if u_init[1] > a_max:
+        u[1] = a_max
+    if u_init[1] < -a_max:
+        u[1] = -a_max
+
 
     Fzf = (m * 9.81) * (lr / (lf + lr))
     Fzr = (m * 9.81) * (lf / (lf + lr)) 

@@ -171,7 +171,6 @@ def frenet_to_cartesian(pose, trajectory):
     # print(diff)
 
     segment_id = np.argmax(diff[diff <= 0])  # should be always id of the point that has smaller s than the point
-    print('segment_id', segment_id)
     
     if trajectory[segment_id, 4] == 0:
         # line

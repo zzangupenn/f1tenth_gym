@@ -352,15 +352,16 @@ class RaceCar(object):
         if self.model == 'lmpc':
             Ddt = 0.02
             x = self.state.copy()
-            x2 = self.state.copy()
+            # x2 = self.state.copy()
             # print('self.state0', self.state)
             steer = self.state[2] + sv * self.time_step/2
+            # steer = sv
             # print('np.array([steer, accl])', np.array([steer, accl]))
             s_pose = np.zeros(6)
             s_pose[[0, 1, 2]] = frenet_utils.cartesian_to_frenet(self.state[[0, 1, 4]], self.waypoints)
-            s_pose[3] = x2[3]
-            s_pose[4] = x2[5]
-            s_pose[5] = x2[6]
+            s_pose[3] = x[3]
+            s_pose[4] = x[5]
+            s_pose[5] = x[6]
             # print('s_pose0', s_pose)
             for ind in range(0, int(self.time_step / Ddt)):
                 s_pose = s_pose + vehicle_dynamics_st_pacjeka_frenet(s_pose, np.array([steer, accl]), 0., self.params) * Ddt
