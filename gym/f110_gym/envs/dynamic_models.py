@@ -120,6 +120,31 @@ def vehicle_dynamics_ks(x, u_init, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max
          x[3]/lwb*np.tan(x[2])])
     return f
 
+@njit(cache=True)
+def vehicle_dynamics_ks_frenet(x, u, curvature, lf, lr):
+    """
+    Uses the kinematic bicycle model in frenet frame to update the state of the vehicle
+    Dynamics reference: https://arxiv.org/pdf/2005.07691.pdf
+    x: current state of the vehicle [s, ey, delta, v, epsi]
+    u: delta: steering speed, a: acceleration, 
+    """
+    # input check
+    # if delta >= self.config.MAX_STEER:
+    #     delta = self.config.MAX_STEER
+    # elif delta <= self.config.MIN_STEER:
+    #     delta = self.config.MIN_STEER
+    # curvature = self.centerline.spline.calc_curvature(x[0])
+    # lf = params['lf']  # distance from spring mass center of gravity to front axle [m]  LENA
+    # lr = params['lr']  # distance from spring mass center of gravity to rear axle [m]  LENB
+    f = np.asarray([ ((x[3] * np.cos(x[4])) / (1 - x[1] * curvature)),
+        (x[3] * np.sin(x[4])),
+        u[0],
+        u[1],
+        (x[3] * np.tan(x[2]) / (lf + lr) - curvature * ((x[3] * np.cos(x[4]))/(1 - curvature * x[1])))])
+
+    return f
+
+# @njit(cache=True)
 def vehicle_dynamics_st_pacjeka_frenet(x, u_init, curvature, params, mu=1.0):
     """
     Single Track Dynamic Vehicle Dynamics.
@@ -179,29 +204,44 @@ def vehicle_dynamics_st_pacjeka_frenet(x, u_init, curvature, params, mu=1.0):
         u[1] = a_max
     if u_init[1] < -a_max:
         u[1] = -a_max
-
-
-    Fzf = (m * 9.81) * (lr / (lf + lr))
-    Fzr = (m * 9.81) * (lf / (lf + lr)) 
-    ky1 = 21.92 # Lateral slip stiffness Kfy/Fz at Fznom
-    Df = mu * Fzf
-    Kf = Fzf * ky1
-    Bf = Kf / (C_Sf * Df)
-    Dr = mu * Fzr
-    Kr = Fzr * ky1
-    Br = Kr / (C_Sr * Dr)
-    
     vx    = x[0]
     vy    = x[1]
     wz    = x[2]
 
+
+    # Fzf = (m * 9.81) * (lr / (lf + lr))
+    # Fzr = (m * 9.81) * (lf / (lf + lr)) 
+    # ky1 = 21.92 # Lateral slip stiffness Kfy/Fz at Fznom
+    # Df = mu * Fzf
+    # Kf = Fzf * ky1
+    # Bf = Kf / (C_Sf * Df)
+    # Dr = mu * Fzr
+    # Kr = Fzr * ky1
+    # Br = Kr / (C_Sr * Dr)
+    # # Compute tire split angle
+    # alpha_f = u[0] - np.arctan2( vy + lf * wz, vx )
+    # alpha_r = - np.arctan2( vy - lf * wz , vx)
+    # # Compute lateral force at front and rear tire
+    # Fyf = Df * np.sin( C_Sf * np.arctan(Bf * alpha_f ) )
+    # Fyr = Dr * np.sin( C_Sr * np.arctan(Br * alpha_r ) )
+    
+    ## Parameters in LMPC
+    m  = 1.98
+    lf = 0.125
+    lr = 0.125
+    I = 0.024
+    Df = 0.8 * m * 9.81 / 2.0
+    Cf = 1.25
+    Bf = 1.0
+    Dr = 0.8 * m * 9.81 / 2.0
+    Cr = 1.25
+    Br = 1.0
     # Compute tire split angle
     alpha_f = u[0] - np.arctan2( vy + lf * wz, vx )
     alpha_r = - np.arctan2( vy - lf * wz , vx)
-
     # Compute lateral force at front and rear tire
-    Fyf = Df * np.sin( C_Sf * np.arctan(Bf * alpha_f ) )
-    Fyr = Dr * np.sin( C_Sr * np.arctan(Br * alpha_r ) )
+    Fyf = Df * np.sin( Cf * np.arctan(Bf * alpha_f ) )
+    Fyr = Dr * np.sin( Cr * np.arctan(Br * alpha_r ) )
 
     # system dynamics
     f = np.array([(u[1] - 1 / m * Fyf * np.sin(u[0]) + x[2]*x[1]),

@@ -32,10 +32,12 @@ from numba import njit
 from scipy import integrate
 
 from f110_gym.envs.dynamic_models import vehicle_dynamics_st, vehicle_dynamics_mb, init_mb, pid, \
-                                        accl_constraints, steering_constraint, vehicle_dynamics_st_pacjeka_frenet
+                                        accl_constraints, steering_constraint, vehicle_dynamics_st_pacjeka_frenet,\
+                                            vehicle_dynamics_ks_frenet
 from f110_gym.envs.laser_models import ScanSimulator2D, check_ttc_jit, ray_cast
 from f110_gym.envs.collision_models import get_vertices, collision_multiple
 import f110_gym.envs.frenet_utils as frenet_utils 
+from f110_gym.envs.utils.Track import Track
 DO_SCAN = False # no collision detection if False
 
 
@@ -100,6 +102,7 @@ class RaceCar(object):
         self.lateral_slip = np.zeros(4)
         self.vertical_tire_forces = np.zeros(4)
         self.waypoints = waypoints
+        self.track = Track.from_numpy(waypoints, downsample_step=1)
 
         if self.model == 'dynamic_ST':
             # state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]
@@ -218,6 +221,8 @@ class RaceCar(object):
             self.state[4] = pose[2]
             self.state[5] = yaw_rate
             self.state[6] = beta
+            self.state_frenet = np.zeros((5,))
+            self.state_frenet2 = np.zeros((5,))
         elif self.model == 'MB':
             params_array = np.array(list(self.params.values()))
             if len(pose) == 29:
@@ -235,7 +240,26 @@ class RaceCar(object):
             self.state[4] = pose[2]
             self.state[5] = yaw_rate
             self.state[6] = beta
-            
+            self.state_frenet = np.zeros((6,))
+            self.state_frenet[[0, 1, 2]] = frenet_utils.cartesian_to_frenet(self.state[[0, 1, 4]], self.waypoints)
+            self.state_frenet[3] = self.state[3]
+            self.state_frenet[4] = self.state[5]
+            self.state_frenet[5] = self.state[6]
+            self.state_frenet2 = self.state_frenet.copy()
+        elif self.model == 'ks_frenet':
+            self.state = np.zeros((7,))
+            self.state[0:2] = pose[0:2]
+            self.state[2] = steering_angle
+            self.state[3] = velocity
+            self.state[4] = pose[2]
+            self.state[5] = yaw_rate
+            self.state[6] = beta
+            self.state_frenet = np.zeros((5,))
+            self.state_frenet[[0, 1, 4]] = frenet_utils.cartesian_to_frenet(self.state[[0, 1, 4]], self.waypoints)
+            self.state_frenet[2] = self.state[2]
+            self.state_frenet[3] = self.state[3]
+            self.state_frenet2 = self.state_frenet.copy()    
+        
         self.steer_buffer = np.empty((0,))
         # reset scan random generator
         self.scan_rng = np.random.default_rng(seed=self.seed)
@@ -350,22 +374,30 @@ class RaceCar(object):
         
         # update physics, get RHS of diff'eq
         if self.model == 'lmpc':
-            Ddt = 0.02
+            Ddt = 0.001
             x = self.state.copy()
-            # x2 = self.state.copy()
-            # print('self.state0', self.state)
             steer = self.state[2] + sv * self.time_step/2
-            # steer = sv
-            # print('np.array([steer, accl])', np.array([steer, accl]))
-            s_pose = np.zeros(6)
+            s_pose = np.zeros(6) 
+            # s_pose: [x1: curvilinear s coordinate
+            #    x2: lateral error ey
+            #    x3: yaw error
+            #    x4: velocity in x direction
+            #    x5: velocity in y direction
+            #    x6: yaw rate]
             s_pose[[0, 1, 2]] = frenet_utils.cartesian_to_frenet(self.state[[0, 1, 4]], self.waypoints)
             s_pose[3] = x[3]
             s_pose[4] = x[5]
             s_pose[5] = x[6]
-            # print('s_pose0', s_pose)
+            
+            s_pose = self.state_frenet2.copy()
             for ind in range(0, int(self.time_step / Ddt)):
-                s_pose = s_pose + vehicle_dynamics_st_pacjeka_frenet(s_pose, np.array([steer, accl]), 0., self.params) * Ddt
-            # print('s_pose1', s_pose)
+                ds_pose = vehicle_dynamics_st_pacjeka_frenet(s_pose, np.array([steer, accl]), 0., self.params) * Ddt
+                s_pose = s_pose + ds_pose
+            self.state_frenet = s_pose
+            if s_pose[0] > self.waypoints[-1, 0]:
+                s_pose[0] = s_pose[0] - self.waypoints[-1, 0]
+            self.state_frenet2 = s_pose
+            
             x_pose = frenet_utils.frenet_to_cartesian(s_pose[[0, 1, 2]], self.waypoints)
             x[0] = x_pose[0]
             x[1] = x_pose[1]
@@ -375,7 +407,38 @@ class RaceCar(object):
             x[5] = s_pose[4]
             x[6] = s_pose[5]
             self.state = x
-            # print('self.state1', self.state)
+        if self.model == 'ks_frenet':
+            Ddt = 0.01
+            x = self.state.copy()
+            s_pose = self.state_frenet.copy()
+            def step_fn(x0, u, Ddt, vehicle_dynamics_fn, args):
+                # return x0 + vehicle_dynamics_fn(x0, u, *args) * Ddt
+                # RK45
+                k1 = vehicle_dynamics_fn(x0, u, *args)
+                k2 = vehicle_dynamics_fn(x0 + k1 * 0.5 * Ddt, u, *args)
+                k3 = vehicle_dynamics_fn(x0 + k2 * 0.5 * Ddt, u, *args)
+                k4 = vehicle_dynamics_fn(x0 + k3 * Ddt, u, *args)
+                return x0 + (k1 + 2 * k2 + 2 * k3 + k4) / 6 * Ddt
+                
+            for _ in range(0, int(self.time_step / Ddt)):
+                s_pose = step_fn(s_pose, np.array([sv, accl]), Ddt, vehicle_dynamics_ks_frenet, 
+                            args=(self.track.curvature(s_pose[0]),
+                            self.params['lf'],
+                            self.params['lr']))
+            
+            if s_pose[0] > self.waypoints[-1, 0]:
+                s_pose[0] = s_pose[0] - self.waypoints[-1, 0]
+            self.state_frenet = s_pose
+                        
+            x_pose = self.track.frenet_to_cartesian(*s_pose[[0, 1, 4]])
+            # x_pose = frenet_utils.frenet_to_cartesian(s_pose[[0, 1, 4]], self.waypoints)
+            # self.state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]
+            x[0] = x_pose[0]
+            x[1] = x_pose[1]
+            x[2] = s_pose[2]
+            x[3] = s_pose[3]
+            x[4] = x_pose[2]
+            self.state = x
         
         elif self.model == 'dynamic_ST':
             Ddt = 0.02
@@ -734,7 +797,7 @@ class Simulator(object):
                         'collisions': self.collisions,
                         'x1': [], # x-pos
                         'x2': [], # y-pos
-                        'x3': [], # steer
+                        'x3': [], # steers
                         'x4': [], # vx
                         'x5': [], # yaw angle
                         'x6': [], # yaw rate
@@ -745,7 +808,9 @@ class Simulator(object):
                         # 'x21': [], # vy rear
                         'control0': [],
                         'control1': [],
-                        'state': []}
+                        'state': [],
+                        'state_frenet': [],
+                        'state_frenet2': []}
         for i, agent in enumerate(self.agents):
             if DO_SCAN: observations['scans'].append(agent_scans[i])
             observations['poses_x'].append(agent.state[0])
@@ -766,6 +831,8 @@ class Simulator(object):
             # observations['x16'].append(agent.state[15])
             # observations['x21'].append(agent.state[20])
             observations['state'].append(agent.state)
+            observations['state_frenet'].append(agent.state_frenet)
+            observations['state_frenet2'].append(agent.state_frenet2)
             observations['control0'].append(control_inputs[i, 0])
             observations['control1'].append(control_inputs[i, 1])
 
