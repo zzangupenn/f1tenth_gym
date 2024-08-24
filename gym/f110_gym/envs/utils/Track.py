@@ -2,6 +2,10 @@ from __future__ import annotations
 import pathlib
 from typing import Optional
 import numpy as np
+from functools import partial
+import jax.numpy as jnp
+import jax
+
 from .cubic_spline import CubicSplineND
 
 
@@ -186,6 +190,38 @@ class Track:
         psi += ephi
 
         return x, y, psi
+    
+    @partial(jax.jit, static_argnums=(0))
+    def vmap_frenet_to_cartesian_jax(self, s, ey, ephi):
+        return jnp.asarray(jax.vmap(self.frenet_to_cartesian_jax, in_axes=(0, 0, 0))(
+            s, ey, ephi
+            )).T
+    
+    @partial(jax.jit, static_argnums=(0))
+    def frenet_to_cartesian_jax(self, s, ey, ephi):
+        """
+        Convert Frenet coordinates to Cartesian coordinates.
+
+        s: distance along the raceline
+        ey: lateral deviation
+        ephi: heading deviation
+
+        returns:
+            x: x-coordinate
+            y: y-coordinate
+            psi: yaw angle
+        """
+        x, y = self.centerline.calc_position_jax(s)
+        psi = self.centerline.calc_yaw_jax(s)
+
+        # Adjust x,y by shifting along the normal vector
+        x -= ey * jnp.sin(psi)
+        y += ey * jnp.cos(psi)
+
+        # Adjust psi by adding the heading deviation
+        psi += ephi
+
+        return x, y, psi
 
     def cartesian_to_frenet(self, x, y, phi, s_guess=None):
         """
@@ -231,6 +267,11 @@ class Track:
             curvature
         """
         return self.centerline.calc_curvature(s)
+    
+    @partial(jax.jit, static_argnums=(0))
+    def curvature_jax(self, s):
+        # return self.centerline.calc_curvature_jax(s)
+        return self.centerline.find_curvature_jax(s)
     
 if __name__ == "__main__":
     # Load the racline.csv
