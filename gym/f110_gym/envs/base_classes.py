@@ -102,7 +102,7 @@ class RaceCar(object):
         self.lateral_slip = np.zeros(4)
         self.vertical_tire_forces = np.zeros(4)
         self.waypoints = waypoints
-        self.track = Track.from_numpy(waypoints, downsample_step=1)
+        self.track = Track.from_numpy(waypoints, waypoints[-1, 0], downsample_step=1)
 
         if self.model == 'dynamic_ST':
             # state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]

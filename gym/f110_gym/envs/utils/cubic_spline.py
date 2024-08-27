@@ -61,7 +61,21 @@ def nearest_point_on_trajectory(point: np.ndarray, trajectory: np.ndarray) -> tu
         dists[i] = np.sqrt(np.sum(temp * temp))
     min_dist_segment = np.argmin(dists)
     return (
-        projections[min_dist_segment],
+        dists[min_dist_segment],
+        t[min_dist_segment],
+        min_dist_segment,
+    )
+
+@partial(jax.jit, static_argnums=(1))
+def nearest_point_on_trajectory_jax(point, trajectory) -> tuple:
+    diffs = trajectory[1:, :] - trajectory[:-1, :]
+    l2s = diffs[:, 0] ** 2 + diffs[:, 1] ** 2
+    dots = jnp.sum((point - trajectory[:-1,:]) * diffs[:,:], axis=1)
+    t = jnp.clip(dots / l2s, 0.0, 1.0)
+    projections = trajectory[:-1, :] + (t * diffs.T).T
+    dists = jnp.linalg.norm(point - projections, axis=1)
+    min_dist_segment = jnp.argmin(dists)
+    return (
         dists[min_dist_segment],
         t[min_dist_segment],
         min_dist_segment,
@@ -112,13 +126,16 @@ class CubicSplineND:
         vxs_spline = vxs if vxs is not None else np.zeros_like(xs)
         axs_spline = axs if axs is not None else np.zeros_like(xs)
 
-        self.points = np.c_[self.xs, self.ys, cosines_spline, sines_spline, ks_spline, vxs_spline, axs_spline]
+        self.points = np.c_[self.xs, self.ys, 
+                            cosines_spline, sines_spline, 
+                            ks_spline, vxs_spline, axs_spline]
         self.points_jax = jnp.array(self.points)
         if not np.all(self.points[-1] == self.points[0]):
             self.points = np.vstack(
                 (self.points, self.points[0])
             )  # Ensure the path is closed
         self.s = self.__calc_s(self.points[:, 0], self.points[:, 1])
+        self.s_jax = jnp.array(self.s)
         # Use scipy CubicSpline to interpolate the points with periodic boundary conditions
         # This is necesaxsry to ensure the path is continuous
         self.spline = interpolate.CubicSpline(self.s, self.points, bc_type="periodic")
@@ -132,8 +149,7 @@ class CubicSplineND:
         vec = self.spline.c[:, segment, state_index]
         # Sum over the rows of exp_x weighted by coefficients in the ith column of s.c
         point = vec.dot(exp_x)
-
-        return np.array(point)
+        return np.asarray(point)
     
     def predict_with_spline_jax(self, point, segment, state_index=0):
         # A (4, 100) array, where the rows contain (x-x[i])**3, (x-x[i])**2 etc.
@@ -141,20 +157,19 @@ class CubicSplineND:
         vec = self.spline_c_jax[:, segment, state_index]
         # # Sum over the rows of exp_x weighted by coefficients in the ith column of s.c
         point = vec.dot(exp_x)
-
         return point
 
     def find_segment_for_x(self, x):
         # Find the segment of the spline that x is in
-        return (x / self.spline.x[-1] * (len(self.spline_x_jax) - 1)).astype(int)
-        # return np.searchsorted(self.spline.x, x, side='right') - 1
+        # return (x / self.spline.x[-1] * (len(self.spline_x_jax) - 2)).astype(int)
+        # print(np.searchsorted(self.spline.x, x, side='right') - 1)
+        return np.searchsorted(self.spline.x, x, side='right') - 1 
     
-    @partial(jax.jit, static_argnums=(0))
     def find_segment_for_x_jax(self, x):
         # Find the segment of the spline that x is in
-        return (x / self.spline_x_jax[-1] * (len(self.spline_x_jax) - 1)).astype(int)
+        # print((x / self.spline_x_jax[-1] * (len(self.spline_x_jax) - 2)).astype(int))
+        return (x / self.spline_x_jax[-1] * (len(self.spline_x_jax) - 2)).astype(int)
         # return jnp.searchsorted(self.spline_x_jax, x, side='right') - 1
-    
     
     def __calc_s(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """
@@ -248,7 +263,6 @@ class CubicSplineND:
             k = self.predict_with_spline(s, segment, 4)[0]
             return k
     
-    @partial(jax.jit, static_argnums=(0))
     def calc_curvature_jax(self, s: float) -> Optional[float]:
         """
         Calc curvature at the given s.
@@ -274,7 +288,6 @@ class CubicSplineND:
             k = self.predict_with_spline_jax(s, segment, 4)[0]
             return k
         
-    @partial(jax.jit, static_argnums=(0))
     def find_curvature_jax(self, s: float) -> Optional[float]:
         segment = self.find_segment_for_x_jax(s)
         k = self.points_jax[segment, 4]
@@ -323,27 +336,29 @@ class CubicSplineND:
             dx, dy = self.spline(s, 1)[:2]
             yaw = math.atan2(dy, dx)
             # Convert yaw to [0, 2pi]
-            yaw = (yaw + 2 * math.pi) % (2 * math.pi)
+            # yaw = (yaw + 2 * math.pi) % (2 * math.pi)
             return yaw
         else:
             segment = self.find_segment_for_x(s)
             cos = self.predict_with_spline(s, segment, 2)[0]
             sin = self.predict_with_spline(s, segment, 3)[0]
-            yaw = (math.atan2(sin, cos) + 2 * math.pi) % (2 * math.pi)
+            # yaw = (math.atan2(sin, cos) + 2 * math.pi) % (2 * math.pi)
+            yaw = math.atan2(sin, cos)
             return yaw
-        
+    
     def calc_yaw_jax(self, s: float) -> Optional[float]:
         if self.psis is None: # yaw was not provided => numerical calculation
             dx, dy = self.spline(s, 1)[:2]
             yaw = jnp.arctan2(dy, dx)
             # Convert yaw to [0, 2pi]
-            yaw = yaw % (2 * jnp.pi)
+            # yaw = yaw % (2 * jnp.pi)
             return yaw
         else:
             segment = self.find_segment_for_x_jax(s)
             cos = self.predict_with_spline_jax(s, segment, 2)[0]
             sin = self.predict_with_spline_jax(s, segment, 3)[0]
-            yaw = (jnp.arctan2(sin, cos) + 2 * jnp.pi) % (2 * jnp.pi) # Get yaw from cos,sin and convert to [0, 2pi]
+            yaw = jnp.arctan2(sin, cos)
+            # yaw = (jnp.arctan2(sin, cos) + 2 * jnp.pi) % (2 * jnp.pi) # Get yaw from cos,sin and convert to [0, 2pi]
             return yaw
         
     def calc_arclength(self, x: float, y: float, s_guess=0.0) -> tuple[float, float]:
@@ -366,7 +381,7 @@ class CubicSplineND:
         ey : float
             lateral deviation for given x, y.
         """
-        _, ey, t, min_dist_segment = nearest_point_on_trajectory(
+        ey, t, min_dist_segment = nearest_point_on_trajectory(
             np.array([x, y]).astype(np.float32), self.points[:, :2]
         )
         # s = s at closest_point + t
@@ -375,6 +390,15 @@ class CubicSplineND:
             + t * (self.s[min_dist_segment + 1] - self.s[min_dist_segment])
         )
 
+        return s, ey
+    
+    @partial(jax.jit, static_argnums=(0))
+    def calc_arclength_jax(self, x: float, y: float, s_guess=0.0) -> tuple[float, float]:
+        ey, t, min_dist_segment = nearest_point_on_trajectory_jax(
+            jnp.array([x, y]), self.points_jax[:, :2]
+        )
+        s = self.s_jax[min_dist_segment] + \
+                t * (self.s_jax[min_dist_segment + 1] - self.s_jax[min_dist_segment])
         return s, ey
 
     def calc_arclength_slow(
@@ -619,7 +643,7 @@ class CubicSpline2D:
         ey : float
             lateral deviation for given x, y.
         """
-        _, ey, t, min_dist_segment = nearest_point_on_trajectory(np.array([x, y]), self.points)
+        ey, t, min_dist_segment = nearest_point_on_trajectory(np.array([x, y]), self.points)
         # s = s at closest_point + t
         s = self.s[min_dist_segment] + t * (self.s[min_dist_segment + 1] - self.s[min_dist_segment])
 
@@ -641,7 +665,7 @@ class CubicSpline2D:
         dx, dy = self.spline(s, 1)
         tangent = np.array([dx, dy])
         return tangent
-    
+
     def _calc_normal(self, s):
         '''
         calculates the normal to the curve at a given point
