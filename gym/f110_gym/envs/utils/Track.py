@@ -440,13 +440,6 @@ class Track:
         return reference.T, ind
     
 if __name__ == "__main__":
-    # Load the racline.csv
-    # track = Track.from_raceline_file(
-    #     filepath=pathlib.Path("raceline.csv"), delimiter=";", downsample_step=10
-    # )
-    # waypoints = np.hstack((track.raceline.s.reshape(-1,1), track.raceline.points))
-    
-    # import utils.frenet_utils as frenet_utils
     from main import Config
     
     config = Config()

@@ -144,28 +144,24 @@ def vehicle_dynamics_ks_frenet(x, u, curvature, lf, lr):
 
     return f
 
-# @njit(cache=True)
-def vehicle_dynamics_st_pacjeka_frenet(x, u_init, curvature, params, mu=1.0):
+@njit(cache=True)
+def vehicle_dynamics_st_pacjeka_frenet(x, u_init, curvature, mu, 
+                                       C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max, sv_min, sv_max, v_switch, a_max, v_min, v_max):
     """
     Single Track Dynamic Vehicle Dynamics.
 
         Args:
-            x (numpy.ndarray (6, )): vehicle state vector (x1, x2, x3, x4, x5, x6)
+            x (numpy.ndarray (7, )): vehicle state vector (x1, x2, x3, x4, x5, x6, x7)
                 x1: curvilinear s coordinate
                 x2: lateral error ey
-                x3: yaw error
+                x3: Steering angle (delta)
                 x4: velocity in x direction
-                x5: velocity in y direction
-                x6: yaw rate
-                
-                # x1: velocity in x direction
-                # x2: velocity in y direction
-                # x3: yaw rate
-                # x4: yaw error
-                # x5: curvilinear s coordinate
-                # x6: lateral error ey
+                x5: yaw error (epsi)
+                x6: velocity in y direction
+                x7: yaw rate (wz)
+
             u (numpy.ndarray (2, )): control input vector (u1, u2)
-                u1: steering angle of front wheels
+                u1: steering angle velocity of front wheels
                 u2: longitudinal acceleration
 
         Returns:
@@ -173,84 +169,89 @@ def vehicle_dynamics_st_pacjeka_frenet(x, u_init, curvature, params, mu=1.0):
     """
     # gravity constant m/s^2
     # g = 9.81
-    x = x[[3, 4, 5, 2, 0, 1]]
-    
     
     # steering constraints
-    lf = params['lf']  # distance from spring mass center of gravity to front axle [m]  LENA
-    lr = params['lr']  # distance from spring mass center of gravity to rear axle [m]  LENB
-    h = params['h']  # M_s center of gravity above ground [m]  HS
-    m = params['m']  # vehicle mass [kg]  MASS
-    I = params['I']  # moment of inertia for sprung mass in yaw [kg m^2]  IZZ
-    C_Sf = params['C_Sf']  # front tire cornering stiffness [N/rad]  CF
-    C_Sr = params['C_Sr']  # rear tire cornering stiffness [N/rad]  CR
-    s_min = params['s_min']  # minimum steering angle [rad]
-    s_max = params['s_max']  # maximum steering angle [rad]
-    # longitudinal constraints
-    v_min = params['v_min']  # minimum velocity [m/s]
-    v_max = params['v_max'] # minimum velocity [m/s]
-    sv_min = params['sv_min'] # minimum steering velocity [rad/s]
-    sv_max = params['sv_max'] # maximum steering velocity [rad/s]
-    v_switch = params['v_switch']  # switching velocity [m/s]
-    a_max = params['a_max'] # maximum absolute acceleration [m/s^2]
+    # lf = params['lf']  # distance from spring mass center of gravity to front axle [m]  LENA
+    # lr = params['lr']  # distance from spring mass center of gravity to rear axle [m]  LENB
+    # h = params['h']  # M_s center of gravity above ground [m]  HS
+    # m = params['m']  # vehicle mass [kg]  MASS
+    # Iz = params['I']  # moment of inertia for sprung mass in yaw [kg m^2]  IZZ
+    # C_Sf = params['C_Sf']  # front tire cornering stiffness [N/rad]  CF
+    # C_Sr = params['C_Sr']  # rear tire cornering stiffness [N/rad]  CR
+    # s_min = params['s_min']  # minimum steering angle [rad]
+    # s_max = params['s_max']  # maximum steering angle [rad]
+
+    # # longitudinal constraints
+    # v_min = params['v_min']  # minimum velocity [m/s]
+    # v_max = params['v_max'] # minimum velocity [m/s]
+    # sv_min = params['sv_min'] # minimum steering velocity [rad/s]
+    # sv_max = params['sv_max'] # maximum steering velocity [rad/s]
+    # v_switch = params['v_switch']  # switching velocity [m/s]
+    # a_max = params['a_max'] # maximum absolute acceleration [m/s^2]
 
     # constraints
-    u = u_init.copy()
-    if u_init[0] > s_max:
-        u[0] = s_max
-    if u_init[0] < s_min:
-        u[0] = s_min
-    if u_init[1] > a_max:
-        u[1] = a_max
-    if u_init[1] < -a_max:
-        u[1] = -a_max
-    vx    = x[0]
-    vy    = x[1]
-    wz    = x[2]
+    # u = u_init
+    steer_v = sv_max if u_init[0] > sv_max else u_init[0]
+    steer_v = sv_min if steer_v < sv_min else steer_v
 
+    acc = a_max if u_init[1] > a_max else u_init[1]
+    acc = -a_max if acc < -a_max else acc
 
-    # Fzf = (m * 9.81) * (lr / (lf + lr))
-    # Fzr = (m * 9.81) * (lf / (lf + lr)) 
-    # ky1 = 21.92 # Lateral slip stiffness Kfy/Fz at Fznom
-    # Df = mu * Fzf
-    # Kf = Fzf * ky1
-    # Bf = Kf / (C_Sf * Df)
-    # Dr = mu * Fzr
-    # Kr = Fzr * ky1
-    # Br = Kr / (C_Sr * Dr)
-    # # Compute tire split angle
-    # alpha_f = u[0] - np.arctan2( vy + lf * wz, vx )
-    # alpha_r = - np.arctan2( vy - lf * wz , vx)
-    # # Compute lateral force at front and rear tire
-    # Fyf = Df * np.sin( C_Sf * np.arctan(Bf * alpha_f ) )
-    # Fyr = Dr * np.sin( C_Sr * np.arctan(Br * alpha_r ) )
+    u = np.array([steer_v, acc])
     
-    ## Parameters in LMPC
-    m  = 1.98
-    lf = 0.125
-    lr = 0.125
-    I = 0.024
-    Df = 0.8 * m * 9.81 / 2.0
-    Cf = 1.25
-    Bf = 1.0
-    Dr = 0.8 * m * 9.81 / 2.0
-    Cr = 1.25
-    Br = 1.0
+    delta_v = u[0]
+    a = u[1]
+    # u = np.array([steering_constraint(x[2], u_init[0], s_min, s_max, sv_min, sv_max), accl_constraints(x[3], u_init[1], v_switch, a_max, v_min, v_max)])
+
+    Fzf = (m * 9.81) * (lr / (lf + lr))
+    Fzr = (m * 9.81) * (lf / (lf + lr)) 
+    ky1 = 21.92 # Lateral slip stiffness Kfy/Fz at Fznom
+    Df = mu * Fzf
+    Kf = Fzf * ky1
+    Bf = Kf / (C_Sf * Df)
+    Dr = mu * Fzr
+    Kr = Fzr * ky1
+    Br = Kr / (C_Sr * Dr)
+    
+    s     = x[0]
+    ey    = x[1]
+    delta = x[2]
+    vx    = x[3]
+    epsi  = x[4]
+    wz    = x[5]
+    vy    = x[6]
+
     # Compute tire split angle
-    alpha_f = u[0] - np.arctan2( vy + lf * wz, vx )
+    alpha_f = delta - np.arctan2( vy + lf * wz, vx )
     alpha_r = - np.arctan2( vy - lf * wz , vx)
+
     # Compute lateral force at front and rear tire
-    Fyf = Df * np.sin( Cf * np.arctan(Bf * alpha_f ) )
-    Fyr = Dr * np.sin( Cr * np.arctan(Br * alpha_r ) )
+    Fyf = Df * np.sin( C_Sf * np.arctan(Bf * alpha_f ) )
+    Fyr = Dr * np.sin( C_Sr * np.arctan(Br * alpha_r ) )
 
     # system dynamics
-    f = np.array([(u[1] - 1 / m * Fyf * np.sin(u[0]) + x[2]*x[1]),
-                   (1 / m * (Fyf * np.cos(u[0]) + Fyr) - x[2] * x[0]),
-                   (1 / I *(lf * Fyf * np.cos(u[0]) - lr * Fyr) ),
-                   ( wz - (x[0] * np.cos(x[3]) - x[1] * np.sin(x[3])) / (1 - curvature * x[5]) * curvature ),
-                   ( (x[0] * np.cos(x[3]) - x[1] * np.sin(x[3])) / (1 - curvature * x[5]) ),
-                   (x[0] * np.sin(x[3])  + x[1] * np.cos(x[3]))])
-    return f[[4, 5, 3, 0, 1, 2]]
+    f = np.array([ ( (vx * np.cos(epsi) - vy * np.sin(epsi)) / (1 - curvature * ey) ), # s
+                   ( vx * np.sin(epsi) + vy * np.cos(epsi) ), # ey
+                   delta_v, # delta
+                   (a - 1 / m * Fyf * np.sin(delta) + wz * vy), # vx
+                   ( wz - (vx * np.cos(epsi) - vy * np.sin(epsi)) / (1 - curvature * ey) * curvature ), # epsi
+                   (1 / I *(lf * Fyf * np.cos(delta) - lr * Fyr) ), # wz
+                   (1 / m * (Fyf * np.cos(delta) + Fyr) - wz * vx), # vy
+                   ]) 
+
+    # x1: velocity in x direction vx
+    # x2: velocity in y direction vy
+    # x3: yaw rate wz
+    # x4: yaw error epsi
+    # x5: curvilinear s coordinate s
+    # x6: lateral error ey
+    # f = jnp.array([(a - 1 / m * Fyf * jnp.sin(delta) + wz*vy),
+    #                (1 / m * (Fyf * jnp.cos(delta) + Fyr) - wz * vx),
+    #                (1 / I *(lf * Fyf * jnp.cos(delta) - lr * Fyr) ),
+    #                ( wz - (vx * jnp.cos(epsi) - vy * jnp.sin(epsi)) / (1 - curvature * ey) * curvature ),
+    #                ( (vx * jnp.cos(epsi) - vy * jnp.sin(epsi)) / (1 - curvature * ey) ),
+    #                ( vx * jnp.sin(epsi)  + vy * jnp.cos(epsi))])
+    return f
 
 
 @njit(cache=True)
