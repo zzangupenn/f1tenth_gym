@@ -341,21 +341,22 @@ class RaceCar(object):
 
         if self.steering_control_mode == 'vel':
             sv = steer
+            
+        def step_fn(x0, u, Ddt, vehicle_dynamics_fn, args):
+            # return x0 + vehicle_dynamics_fn(x0, u, *args) * Ddt
+            # RK45
+            k1 = vehicle_dynamics_fn(x0, u, *args)
+            k2 = vehicle_dynamics_fn(x0 + k1 * 0.5 * Ddt, u, *args)
+            k3 = vehicle_dynamics_fn(x0 + k2 * 0.5 * Ddt, u, *args)
+            k4 = vehicle_dynamics_fn(x0 + k3 * Ddt, u, *args)
+            return x0 + (k1 + 2 * k2 + 2 * k3 + k4) / 6 * Ddt
         
         # update physics, get RHS of diff'eq   
         if self.model == 'ks_frenet':
             Ddt = 0.01
             x = self.state.copy()
             s_state = self.state_frenet.copy()[:5]
-            def step_fn(x0, u, Ddt, vehicle_dynamics_fn, args):
-                # return x0 + vehicle_dynamics_fn(x0, u, *args) * Ddt
-                # RK45
-                k1 = vehicle_dynamics_fn(x0, u, *args)
-                k2 = vehicle_dynamics_fn(x0 + k1 * 0.5 * Ddt, u, *args)
-                k3 = vehicle_dynamics_fn(x0 + k2 * 0.5 * Ddt, u, *args)
-                k4 = vehicle_dynamics_fn(x0 + k3 * Ddt, u, *args)
-                return x0 + (k1 + 2 * k2 + 2 * k3 + k4) / 6 * Ddt
-                
+            
             for _ in range(0, int(self.time_step / Ddt)):
                 s_state = step_fn(s_state, np.array([sv, accl]), Ddt, vehicle_dynamics_ks_frenet, 
                             args=(self.track.curvature(s_state[0]),
@@ -380,16 +381,6 @@ class RaceCar(object):
                 Ddt = self.time_step
             x = self.state.copy()
             s_state = self.state_frenet.copy()
-            def step_fn(x0, u, Ddt, vehicle_dynamics_fn, args):
-                # # Forward euler
-                # return x0 + vehicle_dynamics_fn(x0, u, *args) * Ddt
-
-                # RK45
-                k1 = vehicle_dynamics_fn(x0, u, *args)
-                k2 = vehicle_dynamics_fn(x0 + k1 * 0.5 * Ddt, u, *args)
-                k3 = vehicle_dynamics_fn(x0 + k2 * 0.5 * Ddt, u, *args)
-                k4 = vehicle_dynamics_fn(x0 + k3 * Ddt, u, *args)
-                return x0 + (k1 + 2 * k2 + 2 * k3 + k4) / 6 * Ddt
             
             for ind in range(0, int(self.time_step / Ddt)):
                 s_state = step_fn(s_state, np.array([sv, accl]), Ddt, vehicle_dynamics_st_pacjeka_frenet, 
@@ -425,14 +416,6 @@ class RaceCar(object):
             Ddt = 0.02
             if self.time_step < Ddt:
                 Ddt = self.time_step
-            def step_fn(x0, u, Ddt, vehicle_dynamics_fn, args):
-                # return x0 + vehicle_dynamics_fn(x0, u, *args) * Ddt
-                # RK45
-                k1 = vehicle_dynamics_fn(x0, u, *args)
-                k2 = vehicle_dynamics_fn(x0 + k1 * 0.5 * Ddt, u, *args)
-                k3 = vehicle_dynamics_fn(x0 + k2 * 0.5 * Ddt, u, *args)
-                k4 = vehicle_dynamics_fn(x0 + k3 * Ddt, u, *args)
-                return x0 + (k1 + 2 * k2 + 2 * k3 + k4) / 6 * Ddt
             x = self.state.copy()[:5]
             for ind in range(0, int(self.time_step / Ddt)):
                 x = step_fn(x, np.array([sv, accl]), Ddt, vehicle_dynamics_ks, 
@@ -464,17 +447,6 @@ class RaceCar(object):
             Ddt = 0.02
             if self.time_step < Ddt:
                 Ddt = self.time_step
-            def step_fn(x0, u, Ddt, vehicle_dynamics_st, args):
-                # # Forward euler
-                # return x0 + vehicle_dynamics_st(x0, u, *args) * Ddt
-
-                # RK45
-                k1 = vehicle_dynamics_st(x0, u, *args)
-                k2 = vehicle_dynamics_st(x0 + k1 * 0.5 * Ddt, u, *args)
-                k3 = vehicle_dynamics_st(x0 + k2 * 0.5 * Ddt, u, *args)
-                k4 = vehicle_dynamics_st(x0 + k3 * Ddt, u, *args)
-                return x0 + (k1 + 2 * k2 + 2 * k3 + k4) / 6 * Ddt
-            
             x = self.state.copy()
             for ind in range(0, int(self.time_step / Ddt)):
                 x = step_fn(x, np.array([sv, accl]), Ddt, vehicle_dynamics_st, 
