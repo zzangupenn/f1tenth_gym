@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import jax
 from numba import njit
 
-from utils.cubic_spline import CubicSplineND, CubicSpline2D
+from f110_gym.envs.utils.cubic_spline import CubicSplineND, CubicSpline2D
 
 
 class Track:

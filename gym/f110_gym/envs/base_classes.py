@@ -99,7 +99,10 @@ class RaceCar(object):
         self.lateral_slip = np.zeros(4)
         self.vertical_tire_forces = np.zeros(4)
         self.waypoints = waypoints
-        self.track = Track.from_numpy(waypoints, waypoints[-1, 0], downsample_step=1)
+        if waypoints is not None:
+            self.track = Track.from_numpy(waypoints, waypoints[-1, 0], downsample_step=1)
+        else:
+            self.track = None
 
         if self.model in ['dynamic_ST', 'kinematic_ST', 'ks_frenet', 'pacjeka_frenet']:
             # state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]
@@ -225,11 +228,12 @@ class RaceCar(object):
                                             pose[2], yaw_rate,
                                             beta]), params_array)
         self.state_frenet = np.zeros((7,))
-        self.state_frenet[[0, 1, 4]] = self.track.frenet_to_cartesian(*self.state[[0, 1, 4]])
-        self.state_frenet[2] = self.state[2]
-        self.state_frenet[3] = self.state[3] * np.cos(self.state[6])
-        self.state_frenet[5] = self.state[5]
-        self.state_frenet[6] = self.state[3] * np.sin(self.state[6])
+        if self.track is not None:
+            self.state_frenet[[0, 1, 4]] = self.track.cartesian_to_frenet(*self.state[[0, 1, 4]])
+            self.state_frenet[2] = self.state[2]
+            self.state_frenet[3] = self.state[3] * np.cos(self.state[6])
+            self.state_frenet[5] = self.state[5]
+            self.state_frenet[6] = self.state[3] * np.sin(self.state[6])
                 
         self.steer_buffer = np.empty((0,))
         # reset scan random generator
@@ -353,7 +357,7 @@ class RaceCar(object):
         
         # update physics, get RHS of diff'eq   
         if self.model == 'ks_frenet':
-            Ddt = 0.01
+            Ddt = 0.05
             x = self.state.copy()
             s_state = self.state_frenet.copy()[:5]
             
@@ -413,7 +417,7 @@ class RaceCar(object):
             self.state = x
             
         elif self.model == 'kinematic_ST':
-            Ddt = 0.02
+            Ddt = 0.05
             if self.time_step < Ddt:
                 Ddt = self.time_step
             x = self.state.copy()[:5]
@@ -436,12 +440,13 @@ class RaceCar(object):
                             self.params['v_min'],
                             self.params['v_max']))
             self.state[:5] = x
-            x_pose = self.track.cartesian_to_frenet(*self.state[[0, 1, 4]])
-            s_state = np.zeros(5)
-            s_state[[0, 1, 4]] = x_pose
-            s_state[2] = x[2]
-            s_state[3] = x[3]
-            self.state_frenet = s_state
+            if self.track is not None:
+                x_pose = self.track.cartesian_to_frenet(*self.state[[0, 1, 4]])
+                s_state = np.zeros(7)
+                s_state[[0, 1, 4]] = x_pose
+                s_state[2] = x[2]
+                s_state[3] = x[3]
+                self.state_frenet = s_state
         
         elif self.model == 'dynamic_ST':
             Ddt = 0.02
@@ -468,12 +473,15 @@ class RaceCar(object):
                             self.params['v_max']))
             # update state
             self.state = x
-            x_pose = self.track.cartesian_to_frenet(*x[[0, 1, 4]])
-            s_state = np.zeros(5)
-            s_state[[0, 1, 4]] = x_pose
-            s_state[2] = x[2]
-            s_state[3] = x[3]
-            self.state_frenet = s_state
+            if self.track is not None:
+                x_pose = self.track.cartesian_to_frenet(*x[[0, 1, 4]])
+                s_state = np.zeros(7)
+                s_state[[0, 1, 4]] = x_pose
+                s_state[2] = x[2]
+                s_state[3] = x[3] * np.cos(x[6])
+                s_state[5] = x[5]
+                s_state[6] = x[3] * np.sin(x[6])
+                self.state_frenet = s_state
             
         elif self.model == 'MB':
             integration_method = 'LSODA_old'  # 'LSODA'  'euler' 'LSODA_old' 'RK45'
