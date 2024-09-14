@@ -380,7 +380,7 @@ class RaceCar(object):
             self.state = x
             
         elif self.model == 'pacjeka_frenet':
-            Ddt = 0.01
+            Ddt = 0.005
             if self.time_step < Ddt:
                 Ddt = self.time_step
             x = self.state.copy()

@@ -258,7 +258,7 @@ class Track:
         # Use the normal to calculate the signed lateral deviation
         # normal = self.centerline._calc_normal(s)
         yaw = self.centerline.calc_yaw(s)
-        normal = jnp.asarray([-jnp.sin(yaw), jnp.cos(yaw)])
+        normal = np.asarray([-np.sin(yaw), np.cos(yaw)])
         x_eval, y_eval = self.centerline.calc_position(s)
         dx = x - x_eval
         dy = y - y_eval
@@ -309,6 +309,7 @@ class Track:
     
     @partial(jax.jit, static_argnums=(0))
     def curvature_jax(self, s):
+        s = s % self.s_frame_max
         return self.centerline.calc_curvature_jax(s)
         # return self.centerline.find_curvature_jax(s)
     

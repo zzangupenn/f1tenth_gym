@@ -315,7 +315,7 @@ class CubicSplineND:
             return k
         else:
             segment = self.find_segment_for_x(s)
-            k = self.points[segment, 3]
+            k = self.points[segment, 4]
             return k
         
     def calc_yaw(self, s: float) -> Optional[float]:
