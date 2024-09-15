@@ -221,12 +221,19 @@ class RaceCar(object):
         elif self.model == 'MB':
             params_array = np.array(list(self.params.values()))
             if len(pose) == 29:
-                self.state = pose
+                self.mb_state = pose
             else:
-                self.state = init_mb(np.array([pose[0], pose[1],
+                self.mb_state = init_mb(np.array([pose[0], pose[1],
                                             steering_angle, velocity,
                                             pose[2], yaw_rate,
                                             beta]), params_array)
+            self.state = np.zeros((7,))
+            self.state[0:2] = pose[0:2]
+            self.state[2] = steering_angle
+            self.state[3] = velocity
+            self.state[4] = pose[2]
+            self.state[5] = yaw_rate
+            self.state[6] = beta
         self.state_frenet = np.zeros((7,))
         if self.track is not None:
             self.state_frenet[[0, 1, 4]] = self.track.cartesian_to_frenet(*self.state[[0, 1, 4]])
@@ -388,7 +395,7 @@ class RaceCar(object):
             self.state = x
             
         elif self.model == 'pacjeka_frenet':
-            Ddt = 0.005
+            Ddt = 0.01
             if self.time_step < Ddt:
                 Ddt = self.time_step
             x = self.state.copy()
@@ -515,8 +522,8 @@ class RaceCar(object):
 
             R_w = params_array[39]  # effective wheel/tire radius  chosen as tire rolling radius RR  taken from ADAMS documentation [m]
 
-            u = np.array([steering_constraint(self.state[2], sv, s_min, s_max, sv_min, sv_max),
-                          accl_constraints(self.state[3], accl, v_switch, a_max, v_min, v_max)])
+            u = np.array([steering_constraint(self.mb_state[2], sv, s_min, s_max, sv_min, sv_max),
+                          accl_constraints(self.mb_state[3], accl, v_switch, a_max, v_min, v_max)])
 
             if u[1] > 0:
                 T_B = 0.0
@@ -530,49 +537,72 @@ class RaceCar(object):
 
             control_input = np.array([u[0], front_tire_force, rear_tire_force])
 
-            if np.abs(self.state[3]) < 0.01:
+            if np.abs(self.mb_state[3]) < 0.01:
                 use_kinematic = True
             else:
                 use_kinematic = False
 
             if integration_method == 'euler':
-                f = vehicle_dynamics_mb(self.state, control_input, params_array, use_kinematic)
+                f = vehicle_dynamics_mb(self.mb_state, control_input, params_array, use_kinematic)
                 # update state
-                self.state = self.state + f * self.time_step
+                self.mb_state = self.mb_state + f * self.time_step
             elif integration_method == 'LSODA':
                 x_left = integrate.solve_ivp(self.func_MB, (0.0, self.time_step),
-                                             self.state, method='LSODA',
+                                             self.mb_state, method='LSODA',
                                              args=(control_input, params_array, use_kinematic))
-                self.state = x_left.y[:, -1]
+                self.mb_state = x_left.y[:, -1]
             elif integration_method == 'RK45':
                 x_left = integrate.solve_ivp(self.func_MB, (0.0, self.time_step),
-                                             self.state, method='RK45',
+                                             self.mb_state, method='RK45',
                                              args=(control_input, params_array, use_kinematic))
-                self.state = x_left.y[:, -1]
+                self.mb_state = x_left.y[:, -1]
             elif integration_method == 'LSODA_old':
 
-                x_left = integrate.odeint(self.func_MB2, self.state,
+                x_left = integrate.odeint(self.func_MB2, self.mb_state,
                                           np.array([0.0, self.time_step]),
                                           args=(control_input, params_array, use_kinematic),
                                           mxstep=10000, full_output=1)
                 _, F_x_LF, F_x_RF, F_x_LR, F_x_RR, F_y_LF, F_y_RF, F_y_LR, F_y_RR, \
                     s_lf, s_rf, s_lr, s_rr, alpha_LF, alpha_RF, alpha_LR, alpha_RR, \
-                    F_z_LF, F_z_RF, F_z_LR, F_z_RR = vehicle_dynamics_mb(self.state, control_input, params_array, use_kinematic)
+                    F_z_LF, F_z_RF, F_z_LR, F_z_RR = vehicle_dynamics_mb(self.mb_state, control_input, params_array, use_kinematic)
                 self.tire_forces = np.array([F_x_LF, F_x_RF, F_x_LR, F_x_RR, F_y_LF, F_y_RF, F_y_LR, F_y_RR])
                 self.longitudinal_slip = np.array([s_lf, s_rf, s_lr, s_rr])
                 self.lateral_slip = np.array([alpha_LF, alpha_RF, alpha_LR, alpha_RR])
                 self.vertical_tire_forces = np.array([F_z_LF, F_z_RF, F_z_LR, F_z_RR])
-                self.state = x_left[0][1]
+                self.mb_state = x_left[0][1]
 
             for iState in range(23, 27):
-                if self.state[iState] < 0.0:
-                    self.state[iState] = 0.0
+                if self.mb_state[iState] < 0.0:
+                    self.mb_state[iState] = 0.0
 
+            # bound yaw angle
+            if self.mb_state[4] > 2 * np.pi:
+                self.mb_state[4] = self.mb_state[4] - 2 * np.pi
+            elif self.mb_state[4] < 0:
+                self.mb_state[4] = self.mb_state[4] + 2 * np.pi
+                
+            self.state = self.mb_state[:7]
+            self.state[3] = np.sqrt(self.mb_state[3] ** 2 + self.mb_state[10] ** 2)
+            self.state[6] = np.arctan2(self.mb_state[10], self.mb_state[3])
+                
         # bound yaw angle
         if self.state[4] > 2 * np.pi:
             self.state[4] = self.state[4] - 2 * np.pi
         elif self.state[4] < 0:
             self.state[4] = self.state[4] + 2 * np.pi
+        
+        
+        
+        if self.track is not None:
+            x = self.state.copy()
+            x_pose = self.track.cartesian_to_frenet(*x[[0, 1, 4]])
+            s_state = np.zeros(7)
+            s_state[[0, 1, 4]] = x_pose
+            s_state[2] = x[2]
+            s_state[3] = x[3] * np.cos(x[6])
+            s_state[5] = x[5]
+            s_state[6] = x[3] * np.sin(x[6])
+            self.state_frenet = s_state
 
         # update scan
         # current_scan = self.get_current_scan()
