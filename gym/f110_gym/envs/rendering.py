@@ -50,7 +50,8 @@ print('PLOT_SCALE', PLOT_SCALE)
 # vehicle shape constants
 # CAR_LENGTH = 0.58 # F1/10 car
 # CAR_WIDTH = 0.31 # F1/10 car
-CAR_LENGTH = 4.298 # real car
+# CAR_LENGTH = 4.298 # real car
+CAR_LENGTH = 1.674
 CAR_WIDTH = 1.674 # real car
 BACKGROUND_COLOR = [25, 25, 25]
 WAYPOINT_COLOR = [255, 255, 255]
@@ -102,19 +103,19 @@ class EnvRenderer(pyglet.window.Window):
         self.vertices = None
 
         # current score label
-        self.score_label = pyglet.text.Label(
-                'Lap Time: {laptime:.2f}, Ego Lap Count: {count:.0f}'.format(
-                    laptime=0.0, count=0.0),
-                font_size=24,
-                x=0,
-                y=-800,
-                anchor_x='center',
-                anchor_y='center',
-                # width=0.01,
-                # height=0.01,
-                # color=(255, 255, 255, 255),
-                color=(WAYPOINT_COLOR[0], WAYPOINT_COLOR[1], WAYPOINT_COLOR[2], 255),
-                batch=self.batch)
+        # self.score_label = pyglet.text.Label(
+        #         'Lap Time: {laptime:.2f}, Ego Lap Count: {count:.0f}'.format(
+        #             laptime=0.0, count=0.0),
+        #         font_size=24,
+        #         x=0,
+        #         y=-800,
+        #         anchor_x='center',
+        #         anchor_y='center',
+        #         # width=0.01,
+        #         # height=0.01,
+        #         # color=(255, 255, 255, 255),
+        #         color=(WAYPOINT_COLOR[0], WAYPOINT_COLOR[1], WAYPOINT_COLOR[2], 255),
+        #         batch=self.batch)
 
         self.fps_display = pyglet.window.FPSDisplay(self)
 
@@ -335,7 +336,7 @@ class EnvRenderer(pyglet.window.Window):
                 else:
                     vertices_np = get_vertices(np.array([0., 0., 0.]), CAR_LENGTH, CAR_WIDTH)
                     vertices = list(vertices_np.flatten())
-                    car = self.batch.add(4, GL_QUADS, None, ('v2f', vertices), ('c3B', [99, 52, 94, 99, 52, 94, 99, 52, 94, 99, 52, 94]))
+                    car = self.batch.add(4, GL_QUADS, None, ('v2f', vertices), ('c3B', [55, 126, 184]*4))
                     self.cars.append(car)
 
         poses = np.stack((poses_x, poses_y, poses_theta)).T
@@ -345,5 +346,5 @@ class EnvRenderer(pyglet.window.Window):
             self.cars[j].vertices = vertices
         self.poses = poses
 
-        self.score_label.text = 'Lap Time: {laptime:.2f}, Ego Lap Count: {count:.0f}'.format(laptime=obs['lap_times'][0], count=obs['lap_counts'][obs['ego_idx']])
+        # self.score_label.text = 'Lap Time: {laptime:.2f}, Ego Lap Count: {count:.0f}'.format(laptime=obs['lap_times'][0], count=obs['lap_counts'][obs['ego_idx']])
         # self.score_label.text = 'C0: {c0:.2f}, C1: {c1:.2f}'.format(c0=obs['control0'][0], c1=obs['control1'][0])

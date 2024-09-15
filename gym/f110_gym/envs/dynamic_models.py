@@ -60,6 +60,36 @@ def accl_constraints(vel, accl, v_switch, a_max, v_min, v_max):
 
     return accl
 
+# @njit(cache=True)
+def point_mass_dynamics(x, u, a_max):
+    """
+    Uses a point-mass model to update the state of the vehicle
+    Dynamics reference: https://gitlab.lrz.de/tum-cps/commonroad-vehicle-models/-/blob/master/vehicleModels_commonRoad.pdf?ref_type=heads
+    x: current state of the system [x, y, vx, vy]
+    u: current input to the system [ax, ay]
+    """
+    # accl_constraints
+    # if u[0] <= -a_max:
+    #     u[0] = -a_max
+    # elif u[0] >= a_max:
+    #     u[0] = a_max
+    # if u[1] <= -a_max:
+    #     u[1] = -a_max
+    # elif u[1] >= a_max:
+    #     u[1] = a_max
+   
+    A = np.array([[0, 0, 1, 0], 
+                   [0, 0, 0, 1], 
+                   [0, 0, 0, 0], 
+                   [0, 0, 0, 0]])
+    B = np.array([[0, 0],
+                   [0, 0],
+                   [1, 0],
+                   [0, 1]])
+    f = A @ x + B @ u
+    
+    return f
+
 @njit(cache=True)
 def steering_constraint(steering_angle, steering_velocity, s_min, s_max, sv_min, sv_max):
     """

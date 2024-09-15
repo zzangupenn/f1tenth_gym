@@ -104,7 +104,7 @@ class RaceCar(object):
         else:
             self.track = None
 
-        if self.model in ['dynamic_ST', 'kinematic_ST', 'ks_frenet', 'pacjeka_frenet']:
+        if self.model in ['dynamic_ST', 'kinematic_ST', 'ks_frenet', 'pacjeka_frenet', 'point_mass']:
             # state is [x, y, steer_angle, vel, yaw_angle, yaw_rate, slip_angle]
             self.state = np.zeros((7,))
         elif self.model == 'MB':
@@ -210,7 +210,7 @@ class RaceCar(object):
         # clear collision indicator
         self.in_collision = False
         # clear state
-        if self.model in ['dynamic_ST', 'kinematic_ST', 'pacjeka_frenet', 'ks_frenet']:
+        if self.model in ['dynamic_ST', 'kinematic_ST', 'pacjeka_frenet', 'ks_frenet', 'point_mass']:
             self.state = np.zeros((7,))
             self.state[0:2] = pose[0:2]
             self.state[2] = steering_angle
@@ -356,7 +356,15 @@ class RaceCar(object):
             return x0 + (k1 + 2 * k2 + 2 * k3 + k4) / 6 * Ddt
         
         # update physics, get RHS of diff'eq   
-        if self.model == 'ks_frenet':
+        if self.model == 'point_mass':
+            Ddt = 0.05
+            x = self.state.copy()[:4]
+            for _ in range(0, int(self.time_step / Ddt)):
+                x = step_fn(x, np.array([sv, accl]), Ddt, point_mass_dynamics, 
+                            args=(self.params['mu'],))
+            self.state[:4] = x
+        
+        elif self.model == 'ks_frenet':
             Ddt = 0.05
             x = self.state.copy()
             s_state = self.state_frenet.copy()[:5]
