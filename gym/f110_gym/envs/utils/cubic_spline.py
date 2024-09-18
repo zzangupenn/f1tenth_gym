@@ -334,7 +334,7 @@ class CubicSplineND:
         """
         if self.psis is None: # yaw was not provided => numerical calculation
             dx, dy = self.spline(s, 1)[:2]
-            yaw = math.atan2(dy, dx)
+            yaw = np.arctan2(dy, dx)
             # Convert yaw to [0, 2pi]
             # yaw = (yaw + 2 * math.pi) % (2 * math.pi)
             return yaw
@@ -343,7 +343,7 @@ class CubicSplineND:
             cos = self.predict_with_spline(s, segment, 2)[0]
             sin = self.predict_with_spline(s, segment, 3)[0]
             # yaw = (math.atan2(sin, cos) + 2 * math.pi) % (2 * math.pi)
-            yaw = math.atan2(sin, cos)
+            yaw = np.arctan2(sin, cos)
             return yaw
     
     def calc_yaw_jax(self, s: float) -> Optional[float]:

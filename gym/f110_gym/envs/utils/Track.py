@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import jax
 from numba import njit
 
-from f110_gym.envs.utils.cubic_spline import CubicSplineND, CubicSpline2D
+from utils.cubic_spline import CubicSplineND, CubicSpline2D
 
 
 class Track:
@@ -35,7 +35,7 @@ class Track:
         psis: Optional[np.ndarray] = None,
         kappas: Optional[np.ndarray] = None,
         accxs: Optional[np.ndarray] = None,
-        waypionts: Optional[np.ndarray] = None,
+        waypoints: Optional[np.ndarray] = None,
         s_frame_max: Optional[float] = None
     ):
         """
@@ -55,7 +55,7 @@ class Track:
             raceline of the track, by default None
         """
         self.filepath = filepath
-        self.waypoints = waypionts
+        self.waypoints = waypoints
         self.s_frame_max = s_frame_max
 
         assert xs.shape == ys.shape == velxs.shape, "inconsistent shapes for x, y, vel"
@@ -97,7 +97,7 @@ class Track:
             track object
         """
         assert (
-            waypoints.shape[1] == 7
+            waypoints.shape[1] >= 7
         ), "expected waypoints as [s, x, y, psi, k, vx, ax]"
         
         ss=waypoints[::downsample_step, 0]
@@ -121,7 +121,7 @@ class Track:
             filepath=None,
             raceline=refline,
             centerline=refline,
-            waypionts=waypoints,
+            waypoints=waypoints,
             s_frame_max=s_frame_max
         )
     
@@ -147,7 +147,7 @@ class Track:
         assert filepath.exists(), f"input filepath does not exist ({filepath})"
         waypoints = np.loadtxt(filepath, delimiter=delimiter).astype(np.float32)
         assert (
-            waypoints.shape[1] == 7
+            waypoints.shape[1] >= 7
         ), "expected waypoints as [s, x, y, psi, k, vx, ax]"
         
         ss=waypoints[::downsample_step, 0]
@@ -251,7 +251,7 @@ class Track:
 
         s, ey = self.centerline.calc_arclength(x, y, s_guess)
         # Wrap around
-        s = s % self.centerline.s[-1]
+        s = s % self.s_frame_max
 
         self.s_guess = s # Update the guess for the next iteration
 
@@ -265,7 +265,7 @@ class Track:
         distance_sign = np.sign(np.dot([dx, dy], normal))
         ey = ey * distance_sign
 
-        phi = phi - self.centerline.calc_yaw_jax(s)
+        phi = phi - yaw
         return s, ey, np.arctan2(np.sin(phi), np.cos(phi))
     
     @partial(jax.jit, static_argnums=(0))
@@ -386,8 +386,8 @@ class Track:
         width_r = trajectory[0, 3]
 
         # Initialize output
-        output = np.zeros((trajectory.shape[0], 9))
-        output[0, :] = np.array([s, x, y, psi, waypoint_spline.calc_curvature(s), vx, ax, width_l, width_r])
+        output = np.zeros((trajectory.shape[0], 7))
+        output[0, :] = np.array([s, x, y, psi, waypoint_spline.calc_curvature(s), vx, ax])
 
         # Iterate over trajectory
         for i in range(1, trajectory.shape[0]):
@@ -406,7 +406,7 @@ class Track:
             ax = 0.0
 
             # Save to output
-            output[i, :] = np.array([s, trajectory[i, 0], trajectory[i, 1], psi, kappa, vx, ax, trajectory[i, 2], trajectory[i, 3]])
+            output[i, :] = np.array([s, trajectory[i, 0], trajectory[i, 1], psi, kappa, vx, ax])
 
         return output
     
@@ -441,6 +441,12 @@ class Track:
         return reference.T, ind
     
 if __name__ == "__main__":
+    # Load the racline.csv
+    # track = Track.from_raceline_file(
+    #     filepath=pathlib.Path("raceline.csv"), delimiter=";", downsample_step=10
+    # )
+    # waypoints = np.hstack((track.raceline.s.reshape(-1,1), track.raceline.points))
+    
     from main import Config
     
     config = Config()
@@ -645,3 +651,19 @@ def get_reference_trajectory(predicted_speeds, dist_from_segment_start, idx,
         np.zeros(len(interpolated_speeds))
     ])
     return reference
+
+def points_in_convex_hull(points_hull, points):
+    """
+    # https://stackoverflow.com/questions/16750618/whats-an-efficient-way-to-find-if-a-point-lies-in-the-convex-hull-of-a-point-cl
+    # def point_in_hull(point, hull, tolerance=1e-12):
+    #     return all((np.dot(eq[:-1], point) + eq[-1] <= tolerance)
+    #         for eq in hull.equations)
+    """
+    from scipy.spatial import ConvexHull
+    hull = ConvexHull(points_hull)
+    eq = np.asarray(hull.equations)
+    tolerance=1e-2
+    arr = np.all(np.sum(eq[:, :-1][:, None, :].repeat(points.shape[0], axis=1) * \
+        points[None, :, :].repeat(eq.shape[0], axis=0), axis=2) + \
+            eq[:, -1][:, None].repeat(points.shape[0], axis=1) <= tolerance, axis=0)
+    return arr
