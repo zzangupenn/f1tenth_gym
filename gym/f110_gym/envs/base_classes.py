@@ -194,7 +194,7 @@ class RaceCar(object):
         """
         RaceCar.scan_simulator.set_map(map_path, map_ext)
 
-    def reset(self, pose, steering_angle=0, velocity=0, yaw_rate=0, beta=0):
+    def reset(self, state):
         """
         Resets the vehicle to a pose in cartesian coordinates
         
@@ -211,29 +211,15 @@ class RaceCar(object):
         self.in_collision = False
         # clear state
         if self.model in ['dynamic_ST', 'kinematic_ST', 'pacjeka_frenet', 'ks_frenet', 'point_mass']:
-            self.state = np.zeros((7,))
-            self.state[0:2] = pose[0:2]
-            self.state[2] = steering_angle
-            self.state[3] = velocity
-            self.state[4] = pose[2]
-            self.state[5] = yaw_rate
-            self.state[6] = beta
+            self.state = state
         elif self.model == 'MB':
             params_array = np.array(list(self.params.values()))
-            if len(pose) == 29:
-                self.mb_state = pose
+            if len(state) == 29:
+                self.mb_state = state
             else:
-                self.mb_state = init_mb(np.array([pose[0], pose[1],
-                                            steering_angle, velocity,
-                                            pose[2], yaw_rate,
-                                            beta]), params_array)
-            self.state = np.zeros((7,))
-            self.state[0:2] = pose[0:2]
-            self.state[2] = steering_angle
-            self.state[3] = velocity
-            self.state[4] = pose[2]
-            self.state[5] = yaw_rate
-            self.state[6] = beta
+                self.mb_state = init_mb(state, params_array)    
+            self.state = state
+            
         self.state_frenet = np.zeros((7,))
         if self.track is not None:
             self.state_frenet[[0, 1, 4]] = self.track.cartesian_to_frenet(*self.state[[0, 1, 4]])
@@ -854,16 +840,12 @@ class Simulator(object):
         if initial_states.shape[0] != self.num_agents:
             raise ValueError('Number of poses for reset does not match number of agents.')
         
-        if initial_states.shape[1] == 29:
-            for i in range(self.num_agents):
-                self.agents[i].reset(initial_states[i])
+        # if initial_states.shape[1] == 29:
+        #     for i in range(self.num_agents):
+        #         self.agents[i].reset(initial_states[i])
 
-        else:
-            # loop over poses to reset
-            for i in range(self.num_agents):
-                self.agents[i].reset(initial_states[i, [0, 1, 2]],
-                                    steering_angle=initial_states[i, 3],
-                                    velocity=initial_states[i, 4],
-                                    yaw_rate=initial_states[i, 5],
-                                    beta=initial_states[i, 6])
+        # else:
+        #     # loop over poses to reset
+        for i in range(self.num_agents):
+            self.agents[i].reset(initial_states[i])
         self.observations = None
