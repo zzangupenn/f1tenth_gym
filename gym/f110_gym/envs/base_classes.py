@@ -350,7 +350,7 @@ class RaceCar(object):
         
         # update physics, get RHS of diff'eq   
         if self.model == 'point_mass':
-            Ddt = 0.05
+            Ddt = 0.02
             x = self.state.copy()[:4]
             for _ in range(0, int(self.time_step / Ddt)):
                 x = step_fn(x, np.array([sv, accl]), Ddt, point_mass_dynamics, 
@@ -358,7 +358,7 @@ class RaceCar(object):
             self.state[:4] = x
         
         elif self.model == 'ks_frenet':
-            Ddt = 0.05
+            Ddt = 0.02
             x = self.state.copy()
             s_state = self.state_frenet.copy()[:5]
             
@@ -418,7 +418,7 @@ class RaceCar(object):
             self.state = x
             
         elif self.model == 'kinematic_ST':
-            Ddt = 0.05
+            Ddt = 0.02
             if self.time_step < Ddt:
                 Ddt = self.time_step
             x = self.state.copy()[:5]
@@ -450,7 +450,7 @@ class RaceCar(object):
                 self.state_frenet = s_state
         
         elif self.model == 'dynamic_ST':
-            Ddt = 0.02
+            Ddt = 0.01
             if self.time_step < Ddt:
                 Ddt = self.time_step
             x = self.state.copy()
