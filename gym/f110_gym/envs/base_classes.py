@@ -341,7 +341,7 @@ class RaceCar(object):
             
         def step_fn(x0, u, Ddt, vehicle_dynamics_fn, args):
             # return x0 + vehicle_dynamics_fn(x0, u, *args) * Ddt
-            # RK45
+            # RK4 integration
             k1 = vehicle_dynamics_fn(x0, u, *args)
             k2 = vehicle_dynamics_fn(x0 + k1 * 0.5 * Ddt, u, *args)
             k3 = vehicle_dynamics_fn(x0 + k2 * 0.5 * Ddt, u, *args)
@@ -350,7 +350,7 @@ class RaceCar(object):
         
         # update physics, get RHS of diff'eq   
         if self.model == 'point_mass':
-            Ddt = 0.02
+            Ddt = 0.2
             x = self.state.copy()[:4]
             for _ in range(0, int(self.time_step / Ddt)):
                 x = step_fn(x, np.array([sv, accl]), Ddt, point_mass_dynamics, 
@@ -364,9 +364,23 @@ class RaceCar(object):
             
             for _ in range(0, int(self.time_step / Ddt)):
                 s_state = step_fn(s_state, np.array([sv, accl]), Ddt, vehicle_dynamics_ks_frenet, 
-                            args=(self.track.curvature(s_state[0]),
+                            args=(self.track.curvature(s_state[0]), 
+                            self.params['mu'],
+                            self.params['C_Sf'],
+                            self.params['C_Sr'],
                             self.params['lf'],
-                            self.params['lr']))
+                            self.params['lr'],
+                            self.params['h'],
+                            self.params['m'],
+                            self.params['I'],
+                            self.params['s_min'],
+                            self.params['s_max'],
+                            self.params['sv_min'],
+                            self.params['sv_max'],
+                            self.params['v_switch'],
+                            self.params['a_max'],
+                            self.params['v_min'],
+                            self.params['v_max']))
                 s_state[0] = s_state[0] % self.track.s_frame_max
                     
             self.state_frenet[:5] = s_state
@@ -450,7 +464,7 @@ class RaceCar(object):
                 self.state_frenet = s_state
         
         elif self.model == 'dynamic_ST':
-            Ddt = 0.01
+            Ddt = 0.02
             if self.time_step < Ddt:
                 Ddt = self.time_step
             x = self.state.copy()

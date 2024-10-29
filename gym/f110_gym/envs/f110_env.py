@@ -47,7 +47,7 @@ from pyglet import gl
 # rendering
 # WINDOW_W = 857
 # WINDOW_H = 685
-WINDOW_W = 1500
+WINDOW_W = 1200
 WINDOW_H = 1200
 
 class F110Env(gym.Env):

@@ -151,19 +151,17 @@ def vehicle_dynamics_ks(x, u_init, mu, C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max
     return f
 
 @njit(cache=True)
-def vehicle_dynamics_ks_frenet(x, u, curvature, lf, lr):
+def vehicle_dynamics_ks_frenet(x, u_init, curvature, mu, 
+                                       C_Sf, C_Sr, lf, lr, h, m, I, s_min, s_max, sv_min, sv_max, v_switch, a_max, v_min, v_max):
     """
     Uses the kinematic bicycle model in frenet frame to update the state of the vehicle
     Dynamics reference: https://arxiv.org/pdf/2005.07691.pdf
     x: current state of the vehicle [s, ey, delta, v, epsi]
     u: delta: steering speed, a: acceleration, 
     """
-    # input check
-    # if delta >= self.config.MAX_STEER:
-    #     delta = self.config.MAX_STEER
-    # elif delta <= self.config.MIN_STEER:
-    #     delta = self.config.MIN_STEER
-    # curvature = self.centerline.spline.calc_curvature(x[0])
+
+    u = np.array([steering_constraint(x[2], u_init[0], s_min, s_max, sv_min, sv_max), accl_constraints(x[3], u_init[1], v_switch, a_max, v_min, v_max)])
+    
     # lf = params['lf']  # distance from spring mass center of gravity to front axle [m]  LENA
     # lr = params['lr']  # distance from spring mass center of gravity to rear axle [m]  LENB
     f = np.asarray([ ((x[3] * np.cos(x[4])) / (1 - x[1] * curvature)),
@@ -232,8 +230,8 @@ def vehicle_dynamics_st_pacjeka_frenet(x, u_init, curvature, mu,
     delta_v = u[0]
     a = u[1]
     # u = np.array([steering_constraint(x[2], u_init[0], s_min, s_max, sv_min, sv_max), accl_constraints(x[3], u_init[1], v_switch, a_max, v_min, v_max)])
-    C_Sf, C_Sr = 1.3507, 1.3507
-    # C_Sf, C_Sr = 5, 5
+    # C_Sf, C_Sr = 1.3507, 1.3507
+    C_Sf, C_Sr = 5, 5
     Fzf = (m * 9.81) * (lr / (lf + lr))
     Fzr = (m * 9.81) * (lf / (lf + lr)) 
     ky1 = 21.92 # Lateral slip stiffness Kfy/Fz at Fznom
