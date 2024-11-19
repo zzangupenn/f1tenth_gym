@@ -225,16 +225,20 @@ def vehicle_dynamics_st_pacjeka_frenet(x, u_init, curvature, mu,
     acc = a_max if u_init[1] > a_max else u_init[1]
     acc = -a_max if acc < -a_max else acc
 
-    u = np.array([steer_v, acc])
+    # u = np.array([steer_v, acc])
     
+    
+    u = np.array([steering_constraint(x[2], u_init[0], s_min, s_max, sv_min, sv_max), accl_constraints(x[3], u_init[1], v_switch, a_max, v_min, v_max)])
     delta_v = u[0]
     a = u[1]
-    # u = np.array([steering_constraint(x[2], u_init[0], s_min, s_max, sv_min, sv_max), accl_constraints(x[3], u_init[1], v_switch, a_max, v_min, v_max)])
+    
     # C_Sf, C_Sr = 1.3507, 1.3507
-    C_Sf, C_Sr = 5, 5
+    C_Sf, C_Sr = 1.7, 1.7
+    # C_Sf, C_Sr = 5, 5
     Fzf = (m * 9.81) * (lr / (lf + lr))
     Fzr = (m * 9.81) * (lf / (lf + lr)) 
-    ky1 = 21.92 # Lateral slip stiffness Kfy/Fz at Fznom
+    # ky1 = 21.92 # Lateral slip stiffness Kfy/Fz at Fznom
+    ky1 = 35. # Lateral slip stiffness Kfy/Fz at Fznom
     Df = mu * Fzf
     Kf = Fzf * ky1
     Bf = Kf / (C_Sf * Df)

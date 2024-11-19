@@ -55,8 +55,6 @@ class RaceCar(object):
             roll rate rear, velocity in y-direction rear, z-position rear, velocity in z-direction rear, left front wheel angular speed,
             right front wheel angular speed, left rear wheel angular speed, right rear wheel angular speed, delta_y_f, delta_y_r]
         odom (np.ndarray(13, )): odometry vector [x, y, z, qx, qy, qz, qw, linear_x, linear_y, linear_z, angular_x, angular_y, angular_z]
-        accel (float): current acceleration input
-        steer_angle_vel (float): current steering velocity input
         in_collision (bool): collision indicator
 
     """
@@ -113,10 +111,6 @@ class RaceCar(object):
             
         # pose of opponents in the world
         self.opp_poses = None
-
-        # control inputs
-        self.accel = 0.0
-        self.steer_angle_vel = 0.0
 
         # steering delay buffer
         self.steer_buffer = np.empty((0,))
@@ -204,13 +198,10 @@ class RaceCar(object):
         Returns:
             None
         """
-        # clear control inputs
-        self.accel = 0.0
-        self.steer_angle_vel = 0.0
         # clear collision indicator
         self.in_collision = False
         # clear state
-        if self.model in ['dynamic_ST', 'kinematic_ST', 'pacjeka_frenet', 'ks_frenet', 'point_mass']:
+        if self.model in ['dynamic_ST_direct', 'dynamic_ST', 'kinematic_ST', 'pacjeka_frenet', 'ks_frenet', 'point_mass']:
             self.state = state
         elif self.model == 'MB':
             params_array = np.array(list(self.params.values()))
@@ -274,8 +265,6 @@ class RaceCar(object):
         # if in collision stop vehicle
         if in_collision:
             self.state[3:] = 0.
-            self.accel = 0.0
-            self.steer_angle_vel = 0.0
 
         # update state
         self.in_collision = in_collision
@@ -323,7 +312,8 @@ class RaceCar(object):
         #     self.steer_buffer = np.append(raw_steer, self.steer_buffer)
         steer = raw_steer
 
-        if (self.steering_control_mode != 'vel' or self.drive_control_mode != 'acc'):
+        if (self.steering_control_mode != 'vel' or self.drive_control_mode != 'acc') and \
+            self.model != 'dynamic_ST_direct':
             # steering angle velocity input to steering velocity acceleration input
             accl, sv = pid(drive, steer, self.state[3], self.state[2], self.params['sv_max'], self.params['a_max'],
                         self.params['v_max'], self.params['v_min'])
@@ -358,7 +348,7 @@ class RaceCar(object):
             self.state[:4] = x
         
         elif self.model == 'ks_frenet':
-            Ddt = 0.02
+            Ddt = 0.05
             x = self.state.copy()
             s_state = self.state_frenet.copy()[:5]
             
