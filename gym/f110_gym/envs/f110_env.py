@@ -137,18 +137,18 @@ class F110Env(gym.Env):
             self.params = kwargs['params']
         except:
             if self.model in ['dynamic_ST', 'kinematic_ST', 'pacjeka_frenet', 'ks_frenet', 'point_mass']:
-                self.params = {'mu': 1.0489, 'C_Sf': 4.718, 'C_Sr': 5.4562, 'lf': 0.15875, 'lr': 0.17145, 'h': 0.074,
-                               'm': 3.74, 'I': 0.04712, 's_min': -0.4189, 's_max': 0.4189, 'sv_min': -3.2,
-                               'sv_max': 3.2, 'v_switch': 7.319, 'a_max': 9.51, 'v_min': -5.0, 'v_max': 20.0,
-                               'width': 0.31, 'length': 0.58}  # F1/10 car
+                # self.params = {'mu': 1.0489, 'C_Sf': 4.718, 'C_Sr': 5.4562, 'lf': 0.15875, 'lr': 0.17145, 'h': 0.074,
+                #                'm': 3.74, 'I': 0.04712, 's_min': -0.35, 's_max': 0.35, 'sv_min': -3.2,
+                #                'sv_max': 3.2, 'v_switch': 7.319, 'a_max': 9.51, 'v_min': -5.0, 'v_max': 20.0,
+                #                'width': 0.31, 'length': 0.58}  # F1/10 car
                 # self.params = {'mu': 1.0489, 'C_Sf': 20.898, 'C_Sr': 20.898, 'lf': 0.88392, 'lr': 1.50876, 'h': 0.59436,
                 #                'm': 1225.887, 'I': 1538.853371, 's_min': -0.910, 's_max': 0.910, 'sv_min': -0.6,
                 #                'sv_max': 0.6, 'v_switch': 4.755, 'a_max': 2., 'v_min': -13.9, 'v_max': 99,
                 #                'width': 1.674, 'length': 4.298} # real car
-                # self.params = {'mu': 1.0489, 'C_Sf': 20.898, 'C_Sr': 20.898, 'lf': 0.88392, 'lr': 1.50876, 'h': 0.59436,
-                #                'm': 1225.887, 'I': 1538.853371, 's_min': -0.910, 's_max': 0.910, 'sv_min': -0.4,
-                #                'sv_max': 0.4, 'v_switch': 4.755, 'a_max': 3.5, 'v_min': -13.9, 'v_max': 99,
-                #                'width': 1.674, 'length': 4.298} # real car
+                self.params = {'mu': 1.0489, 'C_Sf': 20.898, 'C_Sr': 20.898, 'lf': 0.88392, 'lr': 1.50876, 'h': 0.59436,
+                               'm': 1225.887, 'I': 1538.853371, 's_min': -0.910, 's_max': 0.910, 'sv_min': -0.4,
+                               'sv_max': 0.4, 'v_switch': 4.755, 'a_max': 3.5, 'v_min': -13.9, 'v_max': 99,
+                               'width': 1.674, 'length': 4.298} # real car
             elif self.model == 'MB':
                 self.params = {
                     # vehicle body dimensions
@@ -309,23 +309,11 @@ class F110Env(gym.Env):
         # self.collision_idx = -1 * np.ones((self.num_agents, ))
 
         # loop completion
-        self.near_start = True
-        self.num_toggles = 0
-
-        # race info
+        self.agents_prev_s = np.array([None] * self.num_agents)
         self.lap_times = np.zeros((self.num_agents, ))
+        self.lap_times_finish = np.zeros((self.num_agents, ))
         self.lap_counts = np.zeros((self.num_agents, ))
         self.current_time = 0.0
-
-        # finish line info
-        self.num_toggles = 0
-        self.near_start = True
-        self.near_starts = np.array([True]*self.num_agents)
-        self.toggle_list = np.zeros((self.num_agents,))
-        self.start_xs = np.zeros((self.num_agents, ))
-        self.start_ys = np.zeros((self.num_agents, ))
-        self.start_thetas = np.zeros((self.num_agents, ))
-        self.start_rot = np.eye(2)
 
         # initiate stuff
         self.sim = Simulator(self.model, self.steering_control_mode, self.drive_control_mode, self.params,
@@ -341,7 +329,7 @@ class F110Env(gym.Env):
         """
         pass
 
-    def _check_done(self):
+    def _check_done(self, obs):
         """
         Check if the current rollout is done
         
@@ -352,39 +340,24 @@ class F110Env(gym.Env):
             done (bool): whether the rollout is done
             toggle_list (list[int]): each agent's toggle list for crossing the finish zone
         """
-
-        # this is assuming 2 agents
-        # TODO: switch to maybe s-based
-        left_t = 2
-        right_t = 2
         
-        poses_x = np.array(self.poses_x)-self.start_xs
-        poses_y = np.array(self.poses_y)-self.start_ys
-        delta_pt = np.dot(self.start_rot, np.stack((poses_x, poses_y), axis=0))
-        temp_y = delta_pt[1,:]
-        idx1 = temp_y > left_t
-        idx2 = temp_y < -right_t
-        temp_y[idx1] -= left_t
-        temp_y[idx2] = -right_t - temp_y[idx2]
-        temp_y[np.invert(np.logical_or(idx1, idx2))] = 0
-
-        dist2 = delta_pt[0, :] ** 2 + temp_y ** 2
-        closes = dist2 <= 15.0  # changed to work with 1:1 cars
-        for i in range(self.num_agents):
-            if closes[i] and not self.near_starts[i]:
-                self.near_starts[i] = True
-                self.toggle_list[i] += 1
-            elif not closes[i] and self.near_starts[i]:
-                self.near_starts[i] = False
-                self.toggle_list[i] += 1
-            self.lap_counts[i] = self.toggle_list[i] // 2
-            if self.toggle_list[i] < 4:
-                self.lap_times[i] = self.current_time
-            # print('toggle_list', self.toggle_list[i])
+        for ind in range(self.num_agents):
+            if self.agents_prev_s[ind] is None:
+                self.agents_prev_s[ind] = obs['state_frenet'][ind][0]
+            else:
+                agent_curr_s = obs['state_frenet'][ind][0]
+                if self.agents_prev_s[ind] - agent_curr_s > self.sim.agents[0].track.waypoints[-1, 0] * 0.85 \
+                    and self.current_time > self.timestep:
+                    self.lap_counts[ind] += 1
+                    self.lap_times[ind] = self.current_time - self.lap_times_finish[ind]
+                    self.lap_times_finish[ind] = self.current_time
+                self.agents_prev_s[ind] = agent_curr_s
+        obs['lap_times'] = self.lap_times
+        obs['lap_counts'] = self.lap_counts
         
-        done = (self.collisions[self.ego_idx]) or np.all(self.toggle_list >= 4)
+        done = (self.collisions[self.ego_idx]) 
         
-        return done, self.toggle_list >= 3
+        return done, np.all(self.lap_counts >= 3), obs
 
     def _update_state(self, obs_dict):
         """
@@ -446,12 +419,11 @@ class F110Env(gym.Env):
             initial_states = temp_states  # fill rest with zeros
 
         # reset counters and data members
-        self.current_time = 0.0
         self.collisions = np.zeros((self.num_agents, ))
-        self.num_toggles = 0
-        self.near_start = True
-        self.near_starts = np.array([True]*self.num_agents)
-        self.toggle_list = np.zeros((self.num_agents,))
+        self.agents_prev_s = np.array([None] * self.num_agents)
+        self.lap_times = np.zeros((self.num_agents, ))
+        self.lap_counts = np.zeros((self.num_agents, ))
+        self.current_time = 0.0
 
         # states after reset
         self.start_xs = initial_states[:, 0]
@@ -485,8 +457,7 @@ class F110Env(gym.Env):
         obs = self.sim.observations
         if obs is None:
             obs = self.sim.get_observations(np.zeros((self.sim.num_agents, 2)))
-        obs['lap_times'] = self.lap_times
-        obs['lap_counts'] = self.lap_counts
+        
 
         F110Env.current_obs = obs
 
@@ -504,7 +475,7 @@ class F110Env(gym.Env):
         self._update_state(obs)
 
         # check done
-        done, toggle_list = self._check_done()
+        done, toggle_list, obs = self._check_done(obs)
         info = {'checkpoint_done': toggle_list}
 
         return obs, done, info

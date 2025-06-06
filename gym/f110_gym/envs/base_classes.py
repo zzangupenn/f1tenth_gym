@@ -91,7 +91,6 @@ class RaceCar(object):
         self.is_ego = is_ego
         self.time_step = time_step
         self.num_beams = num_beams
-        self.fov = fov
         self.tire_forces = np.zeros(8)
         self.longitudinal_slip = np.zeros(4)
         self.lateral_slip = np.zeros(4)
@@ -312,8 +311,7 @@ class RaceCar(object):
         #     self.steer_buffer = np.append(raw_steer, self.steer_buffer)
         steer = raw_steer
 
-        if (self.steering_control_mode != 'vel' or self.drive_control_mode != 'acc') and \
-            self.model != 'dynamic_ST_direct':
+        if (self.steering_control_mode != 'vel' or self.drive_control_mode != 'acc'):
             # steering angle velocity input to steering velocity acceleration input
             accl, sv = pid(drive, steer, self.state[3], self.state[2], self.params['sv_max'], self.params['a_max'],
                         self.params['v_max'], self.params['v_min'])

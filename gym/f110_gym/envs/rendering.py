@@ -48,11 +48,11 @@ PLOT_SCALE = 10. if os.getenv('F110GYM_PLOT_SCALE') == None else float(os.getenv
 print('PLOT_SCALE', PLOT_SCALE)
 
 # vehicle shape constants
-CAR_LENGTH = 0.58 # F1/10 car
-CAR_WIDTH = 0.31 # F1/10 car
+# CAR_LENGTH = 0.58 # F1/10 car
+# CAR_WIDTH = 0.31 # F1/10 car
 # CAR_LENGTH = 4.298 # real car
-# CAR_LENGTH = 1.674
-# CAR_WIDTH = 1.674 # real car
+CAR_WIDTH = 1.674 # real car
+CAR_LENGTH = 1.674
 BACKGROUND_COLOR = [25, 25, 25]
 WAYPOINT_COLOR = [255, 255, 255]
 
@@ -116,6 +116,37 @@ class EnvRenderer(pyglet.window.Window):
         #         # color=(255, 255, 255, 255),
         #         color=(WAYPOINT_COLOR[0], WAYPOINT_COLOR[1], WAYPOINT_COLOR[2], 255),
         #         batch=self.batch)
+        # self.score_label = pyglet.text.Label(
+        #         'Lap Time: {laptime:.2f},Lap Count: {count}'.format(
+        #             laptime=0.0, count=0),
+        #         font_size=24,
+        #         x=0,
+        #         y=-800,
+        #         # anchor_x='center',
+        #         # anchor_y='center',
+        #         anchor_x='left', anchor_y='bottom',
+        #         # width=0.01,
+        #         # height=0.01,
+        #         # color=(255, 255, 255, 255),
+        #         color=(WAYPOINT_COLOR[0], WAYPOINT_COLOR[1], WAYPOINT_COLOR[2], 255),
+        #         batch=self.batch)
+        # self.label = pyglet.text.Label('Lap 0, Time: 00.00',
+        #                   font_name='Arial',
+        #                   font_size=36,
+        #                   x=self.width - 10, y=10,
+        #                   anchor_x='center', anchor_y='bottom',
+        #                   color=(255, 255, 255, 255))
+        
+        self.label = pyglet.text.Label(
+            'Lap 0, Time: 00.00',
+            font_name='Arial',
+            font_size=36,
+            anchor_x='right',
+            anchor_y='bottom',
+            x=self.width - 10,
+            y=10,
+            color=(255, 255, 255, 255)
+        )
 
         self.fps_display = pyglet.window.FPSDisplay(self)
 
@@ -293,11 +324,10 @@ class EnvRenderer(pyglet.window.Window):
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
         # Save the default modelview matrix
-        glPushMatrix()
+        # glPushMatrix()
 
         # Clear window with ClearColor
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-
         # Set orthographic projection matrix
         glOrtho(self.left, self.right, self.bottom, self.top, 1, -1)
 
@@ -305,7 +335,23 @@ class EnvRenderer(pyglet.window.Window):
         self.batch.draw()
         self.fps_display.draw()
         # Remove default modelview matrix
+        # glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPushMatrix()
+        glLoadIdentity()
+        glOrtho(0, self.width, 0, self.height, -1, 1)
+
+        glMatrixMode(GL_MODELVIEW)
+        glPushMatrix()
+        glLoadIdentity()
+
+        self.label.draw()  # Now this draws fixed to the window
+
+        # Restore
         glPopMatrix()
+        glMatrixMode(GL_PROJECTION)
+        glPopMatrix()
+        glMatrixMode(GL_MODELVIEW)
 
     def update_obs(self, obs):
         """
@@ -346,5 +392,5 @@ class EnvRenderer(pyglet.window.Window):
             self.cars[j].vertices = vertices
         self.poses = poses
 
-        # self.score_label.text = 'Lap Time: {laptime:.2f}, Ego Lap Count: {count:.0f}'.format(laptime=obs['lap_times'][0], count=obs['lap_counts'][obs['ego_idx']])
+        self.label.text = 'Lap Time: {laptime:.2f}, Lap Count: {count}'.format(laptime=obs['lap_times'][obs['ego_idx']], count=obs['lap_counts'][obs['ego_idx']])
         # self.score_label.text = 'C0: {c0:.2f}, C1: {c1:.2f}'.format(c0=obs['control0'][0], c1=obs['control1'][0])
