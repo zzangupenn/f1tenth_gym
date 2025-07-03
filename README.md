@@ -1,19 +1,22 @@
-![Python 3.8 3.9](https://github.com/f1tenth/f1tenth_gym/actions/workflows/ci.yml/badge.svg)
-![Docker](https://github.com/f1tenth/f1tenth_gym/actions/workflows/docker.yml/badge.svg)
 # The F1TENTH Gym environment
 
-This is the repository of the F1TENTH Gym environment.
-
-This project is still under heavy development.
-
-You can find the [documentation](https://f1tenth-gym.readthedocs.io/en/latest/) of the environment here.
-
-## Fork note 
-
-This fork changes from the main by:
-1. Correct the collision calculation when outside the boundary.
-2. Allow change of Lidar scan resolution.
-3. Set the default integrator to Eular for consistency. 
+Zirui branch TODO list:
+- [x] clip lidar after adding noise, put lidar noise in config
+- [x] remove unnecessary use of dictionary. model st is 50% faster, mb is 150% faster.
+- [x] toggle renderer
+- [ ] verify collision
+- [x] scan toggle
+- [x] separate time step and integrater time step
+- [x] add frenet
+- [x] use correct loop count frenet_based, added max loop num
+- [ ] also add winding_angle
+- [x] simplify std_state and observation
+- [x] add option "state" in reset
+- [x] control_buffer_size, lidar fov, lidar nums in config
+- [ ] double check dynamics result
+- [x] implemented new rendering with pyqtgraph.opengl
+- [x] added 3d mesh renderering for proof of concept
+- [ ] merge lidar scan fix
 
 ## Quickstart
 We recommend installing the simulation inside a virtualenv. You can install the environment by running:
@@ -30,41 +33,4 @@ Then you can run a quick waypoint follow example by:
 ```bash
 cd examples
 python3 waypoint_follow.py
-```
-
-A Dockerfile is also provided with support for the GUI with nvidia-docker (nvidia GPU required):
-```bash
-docker build -t f1tenth_gym_container -f Dockerfile .
-docker run --gpus all -it -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix f1tenth_gym_container
-````
-Then the same example can be ran.
-
-## Known issues
-- Library support issues on Windows. You must use Python 3.8 as of 10-2021
-- On MacOS Big Sur and above, when rendering is turned on, you might encounter the error:
-```
-ImportError: Can't find framework /System/Library/Frameworks/OpenGL.framework.
-```
-You can fix the error by installing a newer version of pyglet:
-```bash
-$ pip3 install pyglet==1.5.20
-```
-And you might see an error similar to
-```
-f110-gym 0.2.1 requires pyglet<1.5, but you have pyglet 1.5.20 which is incompatible.
-```
-which could be ignored. The environment should still work without error.
-
-## Citing
-If you find this Gym environment useful, please consider citing:
-
-```
-@inproceedings{okelly2020f1tenth,
-  title={F1TENTH: An Open-source Evaluation Environment for Continuous Control and Reinforcement Learning},
-  author={O’Kelly, Matthew and Zheng, Hongrui and Karthik, Dhruv and Mangharam, Rahul},
-  booktitle={NeurIPS 2019 Competition and Demonstration Track},
-  pages={77--89},
-  year={2020},
-  organization={PMLR}
-}
 ```
